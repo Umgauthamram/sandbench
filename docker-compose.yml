@@ -1,0 +1,86 @@
+# SandBench local stack.
+#
+#   docker compose up                  → redis + frontend (works today)
+#   docker compose --profile backend up → also api + worker + db
+#
+# The `api` and `worker` services build from ./backend, which is scaffolded
+# but not yet implemented (see SandBench_Build_Guide.md §3). They're gated
+# behind the `backend` profile so the frontend slice runs without them.
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Point the UI at the gateway once it's running.
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+    depends_on:
+      - redis
+
+  # ── Backend services (profile: backend) — require ./backend to be built ──
+
+  db:
+    image: postgres:16-alpine
+    profiles: ["backend"]
+    environment:
+      - POSTGRES_USER=sandbench
+      - POSTGRES_PASSWORD=sandbench
+      - POSTGRES_DB=sandbench
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sandbench"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+    profiles: ["backend"]
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql+psycopg://sandbench:sandbench@db:5432/sandbench
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./backend
+    profiles: ["backend"]
+    command: rq worker -u redis://redis:6379
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql+psycopg://sandbench:sandbench@db:5432/sandbench
+    # The worker spawns ephemeral sandbox containers via the host Docker daemon.
+    # Mounting the socket grants broad host access — acceptable for local dev
+    # only. Production should use a rootless/remote daemon, gVisor, or
+    # Firecracker (see build guide §2).
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:

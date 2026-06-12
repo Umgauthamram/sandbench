@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+:root {
+  --background: #09090b; /* zinc-950 */
+  --foreground: #ededed;
+  --panel: #111113;
+  --border: #27272a; /* zinc-800 */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-border: var(--border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Verdict palette — surfaced everywhere a run is shown */
+  --color-clean: #34d399; /* emerald-400 */
+  --color-malicious: #f87171; /* red-400 */
+  --color-broken: #fbbf24; /* amber-400 */
+  --color-accent: #818cf8; /* indigo-400 */
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Subtle grid backdrop for marketing surfaces */
+.grid-backdrop {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
