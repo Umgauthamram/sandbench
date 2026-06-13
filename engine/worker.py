@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import redis
 import docker
 
-from config import UPSTASH_REDIS_URL
+from config import UPSTASH_REDIS_URL, LLM_PROVIDER
 from sandbox import runner, static_gate, monitor, review
 from sandbox.rules import Severity, Flag
 from analysis import trace_log
@@ -131,10 +131,11 @@ def handle(job: dict) -> None:
                         error_output = None
                     
                     review_res = review.review_code(code, error_output)
-                    review_text = review_res.get("review_text", "")
-                    patch = review_res.get("patch", "")
                     
-                    if review_text and not review_text.startswith("Error:"):
+                    if review_res.get("ok"):
+                        review_text = review_res.get("review_text", "")
+                        patch = review_res.get("patch", "")
+                        
                         sug = {
                             "id": "sug_review",
                             "category": "tests" if verdict == "broken" else "style",
@@ -155,14 +156,14 @@ def handle(job: dict) -> None:
                                 "error_output": error_output or "",
                                 "review_text": review_text,
                                 "patch": patch or "",
-                                "model": review.LLM_PROVIDER,
+                                "model": LLM_PROVIDER,
                                 "created_at": datetime.now(timezone.utc).isoformat() + "Z"
                             }
                             trace_log.log_trace(trace)
                         except Exception as trace_err:
                             logger.exception("Failed to write training trace: %s", trace_err)
-                    elif review_text.startswith("Error:"):
-                        logger.warning("Analysis engine unavailable for run %s: %s", run_id, review_text)
+                    else:
+                        logger.warning("Analysis engine unavailable for run %s: %s", run_id, review_res.get("review_text", "unknown"))
                 except Exception as analysis_err:
                     logger.exception("Analysis engine execution failed for run %s: %s", run_id, analysis_err)
 

@@ -21,6 +21,6 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
 # LLM Configuration for Analysis Engine
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "gemini")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6Jn1jwVr28JmsUFjX6FH5tFDEtYiQ2pE79_i4FEf6VOWQ")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6Lpzx8J_8mE5hI4tqOudTZvjHXUtHphWhewX1Anik5UyA")
 MODEL_ENDPOINT_URL = os.environ.get("MODEL_ENDPOINT_URL", "")
 TRACE_LOG_PATH = os.environ.get("TRACE_LOG_PATH", "traces.jsonl")

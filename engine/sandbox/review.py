@@ -54,12 +54,16 @@ def _call_gemini_provider(prompt: str) -> Dict[str, Any]:
     if not GEMINI_API_KEY:
         logger.error("GEMINI_API_KEY environment variable is not set")
         return {
+            "ok": False,
             "review_text": "Error: Gemini API key is missing. Cannot perform code review.",
             "patch": ""
         }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={GEMINI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
+    }
     
     payload = {
         "contents": [
@@ -84,20 +88,23 @@ def _call_gemini_provider(prompt: str) -> Dict[str, Any]:
         # Extract response text from Gemini format
         candidates = res_json.get("candidates", [])
         if not candidates:
-            return {"review_text": "Error: No review candidates returned from Gemini API.", "patch": ""}
+            return {"ok": False, "review_text": "Error: No review candidates returned from Gemini API.", "patch": ""}
             
         content_parts = candidates[0].get("content", {}).get("parts", [])
         if not content_parts:
-            return {"review_text": "Error: Empty content parts returned from Gemini API.", "patch": ""}
+            return {"ok": False, "review_text": "Error: Empty content parts returned from Gemini API.", "patch": ""}
             
         text = content_parts[0].get("text", "")
         
         # Parse the structured JSON response
         try:
-            return json.loads(text)
+            parsed = json.loads(text)
+            parsed["ok"] = True
+            return parsed
         except json.JSONDecodeError:
             # Fallback if model did not return valid JSON despite configuration
             return {
+                "ok": True,
                 "review_text": text,
                 "patch": ""
             }
@@ -105,7 +112,8 @@ def _call_gemini_provider(prompt: str) -> Dict[str, Any]:
     except Exception as e:
         logger.exception("Gemini API call failed: %s", e)
         return {
-            "review_text": f"Error calling Gemini API for code review: {str(e)}",
+            "ok": False,
+            "review_text": f"Error calling Gemini API: {type(e).__name__}",
             "patch": ""
         }
 
@@ -115,6 +123,7 @@ def _call_local_provider(prompt: str) -> Dict[str, Any]:
     if not MODEL_ENDPOINT_URL:
         logger.error("MODEL_ENDPOINT_URL environment variable is not set for local provider")
         return {
+            "ok": False,
             "review_text": "Error: Local model endpoint URL is missing. Cannot perform code review.",
             "patch": ""
         }
@@ -144,15 +153,18 @@ def _call_local_provider(prompt: str) -> Dict[str, Any]:
         # Extract OpenAI compatible completions format
         choices = res_json.get("choices", [])
         if not choices:
-            return {"review_text": "Error: No completions returned from local model endpoint.", "patch": ""}
+            return {"ok": False, "review_text": "Error: No completions returned from local model endpoint.", "patch": ""}
 
         content = choices[0].get("message", {}).get("content", "")
         
         # Parse the structured JSON response
         try:
-            return json.loads(content)
+            parsed = json.loads(content)
+            parsed["ok"] = True
+            return parsed
         except json.JSONDecodeError:
             return {
+                "ok": True,
                 "review_text": content,
                 "patch": ""
             }
@@ -160,6 +172,7 @@ def _call_local_provider(prompt: str) -> Dict[str, Any]:
     except Exception as e:
         logger.exception("Local model endpoint API call failed: %s", e)
         return {
-            "review_text": f"Error calling local model endpoint: {str(e)}",
+            "ok": False,
+            "review_text": f"Error calling local model endpoint: {type(e).__name__}",
             "patch": ""
         }
