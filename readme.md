@@ -1,4 +1,4 @@
-can we do a project , i am a developer in dst, i am not the ceo of dst, there is no relationship with ceo of dst and their with this now.
+ i am a developer in dst, i am not the ceo of dst, there is no relationship with ceo of dst and their with this now.
 
 dont involve this.
 

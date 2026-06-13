@@ -4,6 +4,7 @@ import { SeverityTag, StatusPill, VerdictBadge } from "../../../components/badge
 import { Card } from "../../../components/ui";
 import { getRun } from "../../../lib/store";
 import type { Verdict } from "../../../lib/types";
+import { RunPoller } from "../../../components/run-poller";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,7 @@ export default async function RunDetailPage({
 
   return (
     <>
+      <RunPoller id={run.id} initialStatus={run.status} />
       <div className="mb-6">
         <Link href="/runs" className="text-sm text-zinc-500 hover:text-zinc-300">
           ← All runs

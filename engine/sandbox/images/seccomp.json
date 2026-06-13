@@ -1,0 +1,70 @@
+{
+  "_comment": [
+    "SandBench restrictive seccomp profile (§6 hardening checklist).",
+    "Apply with: docker run --security-opt seccomp=seccomp.json ...",
+    "",
+    "This is a DENYLIST: default action is ALLOW, with clearly dangerous",
+    "syscalls forced to return EPERM. It blocks container-escape and",
+    "kernel-tampering primitives without breaking ordinary Python/Node",
+    "workloads. It is the MVP profile.",
+    "",
+    "PRODUCTION: flip defaultAction to SCMP_ACT_ERRNO and enumerate an",
+    "allowlist (Docker's default profile is a good starting point), or move",
+    "to gVisor / Firecracker microVMs as noted in the build guide."
+  ],
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "archMap": [
+    {
+      "architecture": "SCMP_ARCH_X86_64",
+      "subArchitectures": ["SCMP_ARCH_X86", "SCMP_ARCH_X32"]
+    },
+    {
+      "architecture": "SCMP_ARCH_AARCH64",
+      "subArchitectures": ["SCMP_ARCH_ARM"]
+    }
+  ],
+  "syscalls": [
+    {
+      "names": [
+        "mount",
+        "umount",
+        "umount2",
+        "pivot_root",
+        "chroot",
+        "ptrace",
+        "kexec_load",
+        "kexec_file_load",
+        "init_module",
+        "finit_module",
+        "delete_module",
+        "reboot",
+        "swapon",
+        "swapoff",
+        "settimeofday",
+        "clock_settime",
+        "stime",
+        "acct",
+        "bpf",
+        "perf_event_open",
+        "add_key",
+        "request_key",
+        "keyctl",
+        "setns",
+        "unshare",
+        "mknod",
+        "mknodat",
+        "iopl",
+        "ioperm",
+        "create_module",
+        "get_kernel_syms",
+        "query_module",
+        "nfsservctl",
+        "process_vm_readv",
+        "process_vm_writev"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Block container escape, kernel tampering, and cross-process memory access."
+    }
+  ]
+}

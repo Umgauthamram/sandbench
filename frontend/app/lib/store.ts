@@ -84,7 +84,7 @@ export async function createRun(input: SubmitInput): Promise<Run> {
   // can copy it into the sandbox.
   await redis.lpush(
     JOB_QUEUE,
-    JSON.stringify({ runId: id, ...input }),
+    JSON.stringify({ runId: id, language, ...input }),
   );
   return run;
 }

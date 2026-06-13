@@ -3,9 +3,8 @@ import { createRun, type SubmitInput } from "../../lib/store";
 import type { SubmissionType } from "../../lib/types";
 
 const VALID_TYPES: SubmissionType[] = ["code", "files", "api", "model"];
-const MAX_PAYLOAD = 256 * 1024; // 256 KB — size-limit uploads (§A1)
+const MAX_PAYLOAD = 256 * 1024;
 
-// POST /api/submit → create a Run, enqueue a job, return { runId }.
 export async function POST(request: Request) {
   let body: Partial<SubmitInput>;
   try {

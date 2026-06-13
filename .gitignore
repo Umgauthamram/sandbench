@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+.eggs/
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+build/
+
+# Environment variables / Secrets (DO NOT COMMIT SECRETS)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+# But allow .env.example files
+!.env.example
+!frontend/.env.local.example
+
+# OS / IDEs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# SandBench Temp/Build Outputs
+extracted_starter/
+*.log

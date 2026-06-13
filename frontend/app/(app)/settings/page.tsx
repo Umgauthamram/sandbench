@@ -38,14 +38,13 @@ export default function SettingsPage() {
             Integration keys
           </h2>
           <p className="mt-1 text-xs text-zinc-500">
-            Used by the analysis engine (LLM review) and for model submissions.
-            Stored encrypted; never logged.
+            Used for benchmarking your submitted models. Stored encrypted; never logged.
           </p>
           <div className="mt-4 space-y-4">
             <Field
-              label="Anthropic API key"
+              label="Model submission API key"
               type="password"
-              placeholder="sk-ant-…"
+              placeholder="Enter API key..."
             />
           </div>
         </Card>
