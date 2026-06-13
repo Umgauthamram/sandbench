@@ -41,7 +41,7 @@ export default function SubmitPage() {
 
   const [fileName, setFileName] = useState<string>("");
   const [fileBase64, setFileBase64] = useState<string>("");
-  const [archiveKind, setArchiveKind] = useState<"zip" | "targz" | "">("");
+  const [archiveKind, setArchiveKind] = useState<"zip" | "targz" | "rawfile" | "">("");
 
   useEffect(() => {
     fetch("/api/tasks")
@@ -65,13 +65,15 @@ export default function SubmitPage() {
     }
 
     const name = file.name.toLowerCase();
-    let kind: "zip" | "targz" | null = null;
+    let kind: "zip" | "targz" | "rawfile" | null = null;
     if (name.endsWith(".zip")) {
       kind = "zip";
     } else if (name.endsWith(".tar.gz") || name.endsWith(".tgz") || name.endsWith(".gz")) {
       kind = "targz";
+    } else if (name.endsWith(".py") || name.endsWith(".js")) {
+      kind = "rawfile";
     } else {
-      setError("Unsupported file format. Please upload a .zip or .tar.gz / .tgz archive.");
+      setError("Unsupported format. Upload a .py / .js file, or a .zip / .tar.gz archive.");
       return;
     }
 
@@ -82,12 +84,19 @@ export default function SubmitPage() {
     const reader = new FileReader();
     reader.onload = (event) => {
       const result = event.target?.result;
-      if (typeof result === "string") {
+      if (kind === "rawfile" && typeof result === "string") {
+        // For raw source files, base64-encode the text content
+        setFileBase64(btoa(unescape(encodeURIComponent(result))));
+      } else if (typeof result === "string") {
         const base64 = result.split(",")[1];
         setFileBase64(base64);
       }
     };
-    reader.readAsDataURL(file);
+    if (kind === "rawfile") {
+      reader.readAsText(file);
+    } else {
+      reader.readAsDataURL(file);
+    }
   };
 
   async function onSubmit(e: React.FormEvent) {
@@ -215,8 +224,11 @@ export default function SubmitPage() {
               <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50 p-14 text-center text-sm text-zinc-500 transition-colors hover:border-zinc-600 hover:bg-zinc-900">
                 <UploadCloud className="h-10 w-10 text-zinc-600 mb-3" />
                 <span>
-                  Drop a <code className="text-zinc-300">.zip</code> /{" "}
-                  <code className="text-zinc-300">.tar.gz</code> or click to browse
+                  Drop a{" "}
+                  <code className="text-zinc-300">.py</code> /{" "}
+                  <code className="text-zinc-300">.js</code> file, or a{" "}
+                  <code className="text-zinc-300">.zip</code> /{" "}
+                  <code className="text-zinc-300">.tar.gz</code> archive
                 </span>
                 <span className="mt-1.5 text-xs text-zinc-700">
                   Size-limited and validated server-side.
@@ -224,7 +236,7 @@ export default function SubmitPage() {
                 <input
                   type="file"
                   className="hidden"
-                  accept=".zip,.tar,.gz,.tgz"
+                  accept=".py,.js,.zip,.tar,.gz,.tgz"
                   onChange={handleFileChange}
                 />
               </label>

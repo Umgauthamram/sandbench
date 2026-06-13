@@ -17,6 +17,17 @@ export const TASKS: BenchmarkTask[] = [
     description:
       "Print numbers 1–100, replacing multiples of 3 with Fizz, 5 with Buzz, and 15 with FizzBuzz.",
     scorer: "fraction of unit tests passed",
+    broken_code: `def fizzbuzz(n):
+    out = []
+    for i in range(1, n + 1):
+        if i % 3 == 0:
+            out.append("Fizz")
+        elif i % 5 == 0:
+            out.append("Buzz")
+        else:
+            out.append(i)  # bug: should be str(i)
+    return out
+`,
   },
   {
     id: "json-flatten",
@@ -26,8 +37,16 @@ export const TASKS: BenchmarkTask[] = [
     description:
       "Implement flatten(obj) that collapses a nested dict into dot-delimited keys.",
     scorer: "fraction of unit tests passed",
+    broken_code: `def flatten(obj, prefix="", sep="."):
+    result = {}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            result[prefix + k] = v  # bug: doesn't recurse into nested dicts/lists
+    return result
+`,
   },
 ];
+
 
 export const RUNS: Run[] = [
   {

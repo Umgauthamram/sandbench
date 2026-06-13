@@ -9,3 +9,11 @@ description: >
 entrypoint: solution.py
 test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
 scorer: pytest_fraction
+broken_code: |
+  def flatten(obj, prefix="", sep="."):
+      result = {}
+      if isinstance(obj, dict):
+          for k, v in obj.items():
+              result[prefix + k] = v  # bug: doesn't recurse into nested dicts/lists
+      return result
+

@@ -9,3 +9,14 @@ description: >
 entrypoint: solution.py
 test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
 scorer: pytest_fraction
+broken_code: |
+  def fizzbuzz(n):
+      out = []
+      for i in range(1, n + 1):
+          if i % 3 == 0:
+              out.append("Fizz")
+          elif i % 5 == 0:
+              out.append("Buzz")
+          else:
+              out.append(i)  # bug: should be str(i)
+      return out

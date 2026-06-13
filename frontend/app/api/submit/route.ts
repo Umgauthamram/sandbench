@@ -35,8 +35,8 @@ export async function POST(request: Request) {
     if (!body.archiveB64) {
       return NextResponse.json({ error: "archiveB64 is required for files type" }, { status: 400 });
     }
-    if (!body.archiveKind || !["zip", "targz"].includes(body.archiveKind)) {
-      return NextResponse.json({ error: "archiveKind must be 'zip' or 'targz'" }, { status: 400 });
+    if (!body.archiveKind || !["zip", "targz", "rawfile"].includes(body.archiveKind)) {
+      return NextResponse.json({ error: "archiveKind must be 'zip', 'targz', or 'rawfile'" }, { status: 400 });
     }
     // Hard cap: reject if base64 string is larger than 7 MB
     if (body.archiveB64.length > 7 * 1024 * 1024) {

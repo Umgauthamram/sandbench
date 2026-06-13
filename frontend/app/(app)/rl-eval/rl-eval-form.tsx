@@ -6,7 +6,8 @@ import { ShieldCheck, FlaskConical } from "lucide-react";
 import { TASKS } from "../../lib/mock";
 import type { BenchmarkTask } from "../../lib/types";
 
-const SAMPLE_BROKEN = `def fizzbuzz(n):
+const FALLBACK_BROKEN: Record<string, string> = {
+  fizzbuzz: `def fizzbuzz(n):
     out = []
     for i in range(1, n + 1):
         if i % 3 == 0:
@@ -14,9 +15,21 @@ const SAMPLE_BROKEN = `def fizzbuzz(n):
         elif i % 5 == 0:
             out.append("Buzz")
         else:
-            out.append(i)
+            out.append(i)  # bug: should be str(i)
     return out
-`;
+`,
+  "json-flatten": `def flatten(obj, prefix="", sep="."):
+    result = {}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            result[prefix + k] = v  # bug: doesn't recurse
+    return result
+`,
+};
+
+function getBrokenCode(task: { id: string; broken_code?: string }): string {
+  return task.broken_code?.trim() || FALLBACK_BROKEN[task.id] || "";
+}
 
 const PRESETS: Record<
   string,
@@ -63,7 +76,7 @@ export function RlEvalForm() {
   const [endpoint, setEndpoint] = useState(PRESETS.openai.baseUrl);
   const [modelName, setModelName] = useState(PRESETS.openai.defaultModel);
   const [apiKey, setApiKey] = useState("");
-  const [code, setCode] = useState(SAMPLE_BROKEN);
+  const [code, setCode] = useState(() => getBrokenCode(TASKS[0] ?? { id: "" }));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,11 +86,21 @@ export function RlEvalForm() {
       .then((data) => {
         if (data?.tasks?.length) {
           setTasks(data.tasks);
-          setTaskId(data.tasks[0].id);
+          const firstTask = data.tasks[0];
+          setTaskId(firstTask.id);
+          setCode(getBrokenCode(firstTask));
         }
       })
       .catch((err) => console.error("Failed to load tasks:", err));
   }, []);
+
+  const handleTaskChange = (newTaskId: string) => {
+    setTaskId(newTaskId);
+    const task = tasks.find((t) => t.id === newTaskId);
+    if (task) {
+      setCode(getBrokenCode(task));
+    }
+  };
 
   const handleProviderChange = (newProvider: string) => {
     setProvider(newProvider);
@@ -199,7 +222,7 @@ export function RlEvalForm() {
               </span>
               <select
                 value={taskId}
-                onChange={(e) => setTaskId(e.target.value)}
+                onChange={(e) => handleTaskChange(e.target.value)}
                 className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
               >
                 {tasks.map((task) => (

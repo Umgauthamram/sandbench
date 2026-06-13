@@ -89,6 +89,7 @@ export interface BenchmarkTask {
   difficulty: "easy" | "medium" | "hard";
   description: string;
   scorer: string;
+  broken_code?: string; // intentionally buggy seed for RL eval
 }
 
 export interface LeaderboardEntry {

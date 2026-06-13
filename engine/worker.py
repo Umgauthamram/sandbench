@@ -299,106 +299,146 @@ def handle(job: dict) -> None:
             r.set(f"sandbench:run:{run_id}", json.dumps(result))
             return
 
-        user_files, extract_reason = extract_archive(raw_bytes, archive_kind)
-        
-        if user_files is None:
-            logger.warning("Archive validation failed for run %s: %s", run_id, extract_reason)
-            result = {
-                "run_id": run_id,
-                "status": "quarantined",
-                "verdict": "malicious",
-                "score": 0.0,
-                "flags": [
-                    {
-                        "rule_id": "ARCHIVE_REJECTED",
-                        "source": "worker",
-                        "location": "archive",
-                        "severity": "high",
-                        "detail": f"[archive] rejected: {extract_reason}"
-                    }
-                ],
-                "stdout": "",
-                "stderr": f"[archive] rejected: {extract_reason}",
-                "duration_ms": 0,
-                "exit_code": 0,
-                "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
-            }
-            if run_data:
-                run_data["status"] = "quarantined"
-                run_data["verdict"] = "malicious"
-                run_data["score"] = 0.0
-                run_data["finishedAt"] = result["finished_at"]
-                run_data["flags"] = [
-                    {
-                        "id": "ARCHIVE_REJECTED",
-                        "source": "worker",
-                        "rule": "ARCHIVE_REJECTED",
-                        "severity": "high",
-                        "detail": f"[archive] rejected: {extract_reason}"
-                    }
-                ]
-                run_data["logs"].append(f"[archive] rejected: {extract_reason}")
-                r.set(run_key, json.dumps(run_data))
-            r.set(f"sandbench:run:{run_id}", json.dumps(result))
-            return
+        # --- rawfile: single source file uploaded directly ---
+        if archive_kind == "rawfile":
+            try:
+                file_content = raw_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                reason = "uploaded file is not valid UTF-8 text"
+                result = {
+                    "run_id": run_id,
+                    "status": "quarantined",
+                    "verdict": "malicious",
+                    "score": 0.0,
+                    "flags": [{"rule_id": "ARCHIVE_REJECTED", "source": "worker", "location": "archive", "severity": "high", "detail": f"[archive] rejected: {reason}"}],
+                    "stdout": "",
+                    "stderr": f"[archive] rejected: {reason}",
+                    "duration_ms": 0,
+                    "exit_code": 0,
+                    "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
+                }
+                if run_data:
+                    run_data["status"] = "quarantined"
+                    run_data["verdict"] = "malicious"
+                    run_data["score"] = 0.0
+                    run_data["finishedAt"] = result["finished_at"]
+                    run_data["flags"] = [{"id": "ARCHIVE_REJECTED", "source": "worker", "rule": "ARCHIVE_REJECTED", "severity": "high", "detail": f"[archive] rejected: {reason}"}]
+                    run_data["logs"].append(f"[archive] rejected: {reason}")
+                    r.set(run_key, json.dumps(run_data))
+                r.set(f"sandbench:run:{run_id}", json.dumps(result))
+                return
 
-        task_id = job.get("taskId") or ""
-        task = task_registry.get_task(task_id)
-        entrypoint_filename = task.entrypoint if task else ("solution.js" if language == "node" else "solution.py")
-        entrypoint_key = f"/workspace/{entrypoint_filename}"
-        
-        if entrypoint_key not in user_files:
-            # Try to resolve a candidate from the uploaded files to act as the entrypoint
-            ext = ".js" if language == "node" else ".py"
-            candidates = [k for k in user_files.keys() if k.endswith(ext)]
-            if candidates:
-                root_candidates = [c for c in candidates if c.count("/") == 2]
-                selected_candidate = None
-                if root_candidates:
-                    main_names = {"/workspace/main.py", "/workspace/index.js", f"/workspace/{task_id}{ext}"}
-                    for name in main_names:
-                        if name in root_candidates:
-                            selected_candidate = name
-                            break
-                    if not selected_candidate:
-                        selected_candidate = root_candidates[0]
-                else:
-                    selected_candidate = candidates[0]
-                
-                if selected_candidate:
-                    logger.info("Aliasing entrypoint from %s to %s", selected_candidate, entrypoint_key)
-                    user_files[entrypoint_key] = user_files[selected_candidate]
-        
-        if entrypoint_key not in user_files:
-            available_files = [k.replace("/workspace/", "") for k in user_files.keys()]
-            error_msg = f"[archive] entrypoint {entrypoint_filename} not found. Found files: {', '.join(available_files) if available_files else 'none'}"
-            logger.warning("Entrypoint %s not found in user files. Available: %s", entrypoint_key, available_files)
-            result = {
-                "run_id": run_id,
-                "status": "done",
-                "verdict": "broken",
-                "score": 0.0,
-                "flags": [],
-                "stdout": "",
-                "stderr": error_msg,
-                "duration_ms": 0,
-                "exit_code": -1,
-                "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
-            }
+            task_id = job.get("taskId") or ""
+            task = task_registry.get_task(task_id)
+            entrypoint_filename = task.entrypoint if task else ("solution.js" if language == "node" else "solution.py")
+            entrypoint_key = f"/workspace/{entrypoint_filename}"
+            user_files = {entrypoint_key: file_content}
+            code = file_content
             if run_data:
-                run_data["status"] = "done"
-                run_data["verdict"] = "broken"
-                run_data["score"] = 0.0
-                run_data["finishedAt"] = result["finished_at"]
-                run_data["logs"].append(error_msg)
+                run_data["logs"].append("[worker] raw file validated successfully (1 file)")
                 r.set(run_key, json.dumps(run_data))
-            r.set(f"sandbench:run:{run_id}", json.dumps(result))
-            return
 
-        code = user_files[entrypoint_key]
-        if run_data:
-            run_data["logs"].append(f"[worker] archive validated successfully ({len(user_files)} extra files found)")
-            r.set(run_key, json.dumps(run_data))
+        else:
+            user_files, extract_reason = extract_archive(raw_bytes, archive_kind)
+            
+            if user_files is None:
+                logger.warning("Archive validation failed for run %s: %s", run_id, extract_reason)
+                result = {
+                    "run_id": run_id,
+                    "status": "quarantined",
+                    "verdict": "malicious",
+                    "score": 0.0,
+                    "flags": [
+                        {
+                            "rule_id": "ARCHIVE_REJECTED",
+                            "source": "worker",
+                            "location": "archive",
+                            "severity": "high",
+                            "detail": f"[archive] rejected: {extract_reason}"
+                        }
+                    ],
+                    "stdout": "",
+                    "stderr": f"[archive] rejected: {extract_reason}",
+                    "duration_ms": 0,
+                    "exit_code": 0,
+                    "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
+                }
+                if run_data:
+                    run_data["status"] = "quarantined"
+                    run_data["verdict"] = "malicious"
+                    run_data["score"] = 0.0
+                    run_data["finishedAt"] = result["finished_at"]
+                    run_data["flags"] = [
+                        {
+                            "id": "ARCHIVE_REJECTED",
+                            "source": "worker",
+                            "rule": "ARCHIVE_REJECTED",
+                            "severity": "high",
+                            "detail": f"[archive] rejected: {extract_reason}"
+                        }
+                    ]
+                    run_data["logs"].append(f"[archive] rejected: {extract_reason}")
+                    r.set(run_key, json.dumps(run_data))
+                r.set(f"sandbench:run:{run_id}", json.dumps(result))
+                return
+
+            task_id = job.get("taskId") or ""
+            task = task_registry.get_task(task_id)
+            entrypoint_filename = task.entrypoint if task else ("solution.js" if language == "node" else "solution.py")
+            entrypoint_key = f"/workspace/{entrypoint_filename}"
+            
+            if entrypoint_key not in user_files:
+                # Try to resolve a candidate from the uploaded files to act as the entrypoint
+                ext = ".js" if language == "node" else ".py"
+                candidates = [k for k in user_files.keys() if k.endswith(ext)]
+                if candidates:
+                    root_candidates = [c for c in candidates if c.count("/") == 2]
+                    selected_candidate = None
+                    if root_candidates:
+                        main_names = {"/workspace/main.py", "/workspace/index.js", f"/workspace/{task_id}{ext}"}
+                        for name in main_names:
+                            if name in root_candidates:
+                                selected_candidate = name
+                                break
+                        if not selected_candidate:
+                            selected_candidate = root_candidates[0]
+                    else:
+                        selected_candidate = candidates[0]
+                    
+                    if selected_candidate:
+                        logger.info("Aliasing entrypoint from %s to %s", selected_candidate, entrypoint_key)
+                        user_files[entrypoint_key] = user_files[selected_candidate]
+            
+            if entrypoint_key not in user_files:
+                available_files = [k.replace("/workspace/", "") for k in user_files.keys()]
+                error_msg = f"[archive] entrypoint {entrypoint_filename} not found. Found files: {', '.join(available_files) if available_files else 'none'}"
+                logger.warning("Entrypoint %s not found in user files. Available: %s", entrypoint_key, available_files)
+                result = {
+                    "run_id": run_id,
+                    "status": "done",
+                    "verdict": "broken",
+                    "score": 0.0,
+                    "flags": [],
+                    "stdout": "",
+                    "stderr": error_msg,
+                    "duration_ms": 0,
+                    "exit_code": -1,
+                    "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
+                }
+                if run_data:
+                    run_data["status"] = "done"
+                    run_data["verdict"] = "broken"
+                    run_data["score"] = 0.0
+                    run_data["finishedAt"] = result["finished_at"]
+                    run_data["logs"].append(error_msg)
+                    r.set(run_key, json.dumps(run_data))
+                r.set(f"sandbench:run:{run_id}", json.dumps(result))
+                return
+
+            code = user_files[entrypoint_key]
+            if run_data:
+                run_data["logs"].append(f"[worker] archive validated successfully ({len(user_files)} extra files found)")
+                r.set(run_key, json.dumps(run_data))
 
     try:
         flags = []
@@ -810,7 +850,8 @@ def main() -> None:
                 "language": task.language,
                 "difficulty": task.difficulty,
                 "description": task.description,
-                "scorer": scorer_label
+                "scorer": scorer_label,
+                "broken_code": task.broken_code or "",
             })
         r.set("tasks", json.dumps(public_list))
         logger.info("[worker] published %d tasks to Redis", len(public_list))

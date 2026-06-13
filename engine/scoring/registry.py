@@ -29,6 +29,7 @@ class Task:
     test_command: List[str]
     scorer: str
     tests_dir: Path  # absolute path to the tests/ folder for this task
+    broken_code: str = ""  # intentionally buggy seed for RL eval
 
 
 def _scan_tasks() -> Dict[str, Task]:
@@ -55,6 +56,7 @@ def _scan_tasks() -> Dict[str, Task]:
                 test_command=data["test_command"],
                 scorer=data.get("scorer", "pytest_fraction"),
                 tests_dir=entry / "tests",
+                broken_code=data.get("broken_code", "").strip(),
             )
             registry[task.id] = task
             logger.info("Loaded task: %s (%s)", task.id, task.title)
