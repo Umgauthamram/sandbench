@@ -46,8 +46,8 @@
   --color-foreground: var(--foreground);
   --color-panel: var(--panel);
   --color-border: var(--border);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-poppins);
+  --font-mono: var(--font-poppins);
 
   /* Verdict palette — surfaced everywhere a run is shown */
   --color-clean: #34d399; /* emerald-400 */

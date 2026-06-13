@@ -7,45 +7,22 @@ network_mode=none and never sees the endpoint or key.
 KEY SAFETY: the api_key, the Authorization header, and the raw endpoint are
 NEVER logged or returned in any string. On any error we surface only the
 exception type name. This mirrors the error-scrubbing in sandbox/review.py.
+
+DNS REBINDING NOTE:
+The authoritative defense against DNS rebinding (TOCTOU) in production is a
+NETWORK EGRESS policy on the host (firewall/iptables blocking outbound to
+private/link-local/metadata ranges). The ssrf_guard validation here catches the
+obvious cases and gives good error UX; it is not rebinding-proof on its own,
+by design — the network policy is.
 """
 import json
 import logging
-from urllib.parse import urlparse
 
 import requests
-from requests.adapters import HTTPAdapter
 
 from sandbox import ssrf_guard
 
 logger = logging.getLogger(__name__)
-
-
-class PinnedIPAdapter(HTTPAdapter):
-    """Custom HTTPAdapter that forces socket connections to a pinned IP address.
-
-    Ensures that DNS is resolved only once (during ssrf_guard check) and prevents
-    TOCTOU / DNS-rebinding attacks by bypass-resolving the hostname to the pinned IP.
-    For HTTPS, it preserves SNI and verifies the certificate against the original hostname.
-    """
-    def __init__(self, pinned_ip: str, original_host: str, *args, **kwargs):
-        self.pinned_ip = pinned_ip
-        self.original_host = original_host
-        super().__init__(*args, **kwargs)
-
-    def get_connection(self, url, proxies=None):
-        conn = super().get_connection(url, proxies)
-        conn.host = self.pinned_ip
-        return conn
-
-    def get_connection_with_tls_context(self, request, verify, proxies=None, cert=None):
-        conn = super().get_connection_with_tls_context(request, verify, proxies, cert)
-        conn.host = self.pinned_ip
-        if conn.scheme == "https":
-            conn.assert_hostname = self.original_host
-            if not conn.conn_kw:
-                conn.conn_kw = {}
-            conn.conn_kw["server_hostname"] = self.original_host
-        return conn
 
 
 def call_user_model(
@@ -54,18 +31,17 @@ def call_user_model(
     prompt: str,
     timeout_s: int = 30,
     max_response_bytes: int = 262144,
+    model_name: str = "user-model",
 ) -> tuple[bool, str]:
     """Call the user's model endpoint. Returns (ok, content) or (False, safe_error).
 
-    Performs an SSRF check and pins DNS resolution BEFORE any network activity;
-    on rejection makes no request at all.
+    Performs an SSRF check BEFORE any network activity; on rejection makes no
+    request at all.
     """
-    # 1. SSRF guard & DNS resolution — resolved once on host to prevent DNS rebinding.
+    # 1. SSRF guard & DNS resolution — resolved on host to prevent obvious SSRF cases.
     hostname, validated_ips, reason = ssrf_guard.resolve_safe(endpoint)
     if not hostname or not validated_ips:
         return (False, f"endpoint rejected: {reason}")
-
-    pinned_ip = validated_ips[0]
 
     # 2. Normalize to an OpenAI-compatible completions URL.
     base = endpoint.rstrip("/")
@@ -81,18 +57,14 @@ def call_user_model(
         "Content-Type": "application/json",
     }
     payload = {
-        "model": "user-model",
+        "model": model_name,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.2,
         "response_format": {"type": "json_object"},
     }
 
-    # 3. Pin connection to the resolved IP
+    # 3. Dispatches the request via standard Session to support CDN-fronted hosts
     session = requests.Session()
-    adapter = PinnedIPAdapter(pinned_ip=pinned_ip, original_host=hostname)
-    parsed = urlparse(endpoint)
-    scheme = (parsed.scheme or "https").lower()
-    session.mount(f"{scheme}://{hostname}", adapter)
 
     try:
         response = session.post(

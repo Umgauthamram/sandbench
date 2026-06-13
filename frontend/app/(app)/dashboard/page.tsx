@@ -28,18 +28,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <PageHeader
-        title="Dashboard"
-        subtitle="Your submissions, runs, and verdicts at a glance."
-        action={
-          <Link
-            href="/submit"
-            className="inline-flex items-center gap-2 rounded-lg bg-grad-accent px-4 py-2 text-sm font-semibold text-zinc-950 transition-transform hover:scale-[1.02] shadow-sm shadow-orange-500/10"
-          >
-            New submission
-          </Link>
-        }
-      />
+
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Total runs" value={total} />
@@ -47,11 +36,19 @@ export default async function DashboardPage() {
         <Stat label="Quarantined" value={quarantined} />
         <Stat label="Avg score" value={`${avg}%`} />
       </div>
-
-      <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
-        Recent runs
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+          Recent logs
+        </h2>
+        <Link
+          href="/submit"
+          className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-black bg-white font-semibold transition-transform hover:scale-[1.02] shadow-sm shadow-orange-500/10"
+        >
+          New Run
+        </Link>
+      </div>
       <RunList runs={runs} />
+
     </>
   );
 }

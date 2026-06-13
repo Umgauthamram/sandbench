@@ -95,7 +95,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-xl bg-grad-accent px-4 py-3 text-[15px] font-bold text-zinc-950 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 shadow-md shadow-orange-500/10 cursor-pointer mt-2"
+          className="w-full rounded-xl bg-grad-accent px-4 py-3 text-[15px] font-bold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 shadow-md shadow-orange-500/10 cursor-pointer mt-2"
         >
           {submitting
             ? "Please wait…"

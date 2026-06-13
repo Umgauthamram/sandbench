@@ -13,10 +13,6 @@ export default async function RlEvalPage() {
 
   return (
     <>
-      <PageHeader
-        title="Model evaluation"
-        subtitle="Bring your own OpenAI-compatible model. We run it as the repair agent against a benchmark task and score the improvement (reward). Your model is called host-side only — the sandbox stays offline and just scores the produced code."
-      />
       <RlEvalForm />
     </>
   );

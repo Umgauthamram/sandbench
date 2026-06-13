@@ -88,10 +88,22 @@ export function SettingsForm({ user }: { user: SafeUser }) {
           />
         </div>
       </Card>
+      <div className="flex items-center gap-3 pt-2">
+        <button
+          type="button"
+          disabled
+          className="rounded-lg bg-grad-accent px-5 py-2.5 text-sm font-semibold text-zinc-950 opacity-40 cursor-not-allowed select-none"
+        >
+          Save changes
+        </button>
+        <span className="text-xs text-zinc-500">
+          (Display name changes are currently locked)
+        </span>
+      </div>
 
 
       {/* Integration Keys */}
-      <Card>
+      {/* <Card>
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
             Integration Keys
@@ -116,7 +128,7 @@ export function SettingsForm({ user }: { user: SafeUser }) {
             </div>
           </div>
         </div>
-      </Card>
+      </Card> */}
 
       {/* Danger Zone */}
       <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 space-y-4">
@@ -183,19 +195,6 @@ export function SettingsForm({ user }: { user: SafeUser }) {
         )}
       </div>
 
-      {/* Save changes - disabled since name is read-only */}
-      <div className="flex items-center gap-3 pt-2">
-        <button
-          type="button"
-          disabled
-          className="rounded-lg bg-grad-accent px-5 py-2.5 text-sm font-semibold text-zinc-950 opacity-40 cursor-not-allowed select-none"
-        >
-          Save changes
-        </button>
-        <span className="text-xs text-zinc-500">
-          (Display name changes are currently locked)
-        </span>
-      </div>
     </div>
   );
 }

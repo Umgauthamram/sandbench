@@ -16,10 +16,7 @@ export default async function RunsPage() {
   const runs = await listRuns(user.id);
   return (
     <>
-      <PageHeader
-        title="Runs"
-        subtitle="Every submission you've executed, newest first."
-      />
+     
       <RunList runs={runs} />
     </>
   );

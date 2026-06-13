@@ -19,12 +19,13 @@ import type { SafeUser } from "../lib/types";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/submit", label: "New submission", icon: Plus },
-  { href: "/runs", label: "Runs", icon: ListChecks },
+    { href: "/tasks", label: "Benchmark tasks", icon: Boxes },
+      { href: "/rl-eval", label: "RL Environment", icon: FlaskConical },
+  // { href: "/submit", label: "New submission", icon: Plus },
+  { href: "/runs", label: "Logs", icon: ListChecks },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-  { href: "/tasks", label: "Benchmark tasks", icon: Boxes },
-  { href: "/playground", label: "RL playground", icon: Bot },
-  { href: "/rl-eval", label: "RL eval", icon: FlaskConical },
+  // { href: "/playground", label: "RL playground", icon: Bot },
+
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -72,9 +73,9 @@ export function AppSidebar({ user }: { user?: SafeUser | null }) {
                 }`}
               />
               {item.label}
-              {active && (
-                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-400" />
-              )}
+              {/* {active && (
+                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-red-400" />
+              )} */}
             </Link>
           );
         })}
@@ -88,7 +89,7 @@ export function AppSidebar({ user }: { user?: SafeUser | null }) {
         )}
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-500 transition-all hover:bg-zinc-800/60 hover:text-zinc-300 cursor-pointer text-left"
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-black transition-all bg-white hover:scale-105 cursor-pointer text-left"
         >
           <LogOut className="h-4 w-4 shrink-0" />
           Log out

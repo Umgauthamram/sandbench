@@ -1,4 +1,4 @@
-"""Unit tests for model_client response size capping and connection pinning.
+"""Unit tests for model_client response size capping and normal requests.
 
 No real network calls are made.
 """
@@ -8,7 +8,6 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from sandbox.model_client import call_user_model
-import urllib3.util.connection as urllib3_connection
 
 # Mock DNS map
 _NAME_MAP = {
@@ -50,21 +49,21 @@ def test_model_client_response_too_large():
         mock_resp.close.assert_called()
 
 
-def test_model_client_pins_connection():
-    """Verify that the socket connection is made to the pinned IP address, not the hostname."""
+def test_model_client_normal_request():
+    """Verify that a normal successful path returns (True, content) and makes a standard request."""
     endpoint = "https://api.openai.com/v1"
 
-    called_addresses = []
+    with patch("requests.Session.send") as mock_send:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.iter_content.return_value = [
+            json.dumps({
+                "choices": [{"message": {"content": "normal-response"}}]
+            }).encode("utf-8")
+        ]
+        mock_send.return_value = mock_resp
 
-    def mock_create_connection(address, *args, **kwargs):
-        called_addresses.append(address)
-        raise ConnectionRefusedError("Simulated connection refusal")
-
-    with patch("urllib3.util.connection.create_connection", new=mock_create_connection):
         ok, res = call_user_model(endpoint, "test-key", "test-prompt")
-
-    assert ok is False
-    # Verify that create_connection was called with the pinned IP ('104.18.32.7', 443)
-    # and NOT the hostname ('api.openai.com', 443)
-    assert len(called_addresses) > 0
-    assert called_addresses[0] == ("104.18.32.7", 443)
+        assert ok is True
+        assert res == "normal-response"
+        mock_send.assert_called_once()

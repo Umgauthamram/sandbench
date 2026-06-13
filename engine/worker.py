@@ -43,17 +43,25 @@ def _handle_model_eval(job: dict, run_id: str, run_key: str, run_data, language:
     or any log. trace_log is intentionally NOT called for model_eval runs.
     """
     from rl_env.model_eval import run_model_eval
+    from sandbox import providers
 
     task_id = job.get("taskId") or ""
     broken_code = job.get("payload") or job.get("code") or ""
     endpoint = job.get("modelEndpoint") or ""
     api_key = job.get("modelApiKey") or ""
+    provider = job.get("provider") or "openai"
+    model_name = job.get("modelName") or "user-model"
+
+    if not endpoint.strip():
+        resolved_url = providers.get_base_url(provider)
+        if resolved_url is not None:
+            endpoint = resolved_url
 
     if run_data:
-        run_data["logs"].append("[model-eval] calling user model...")
+        run_data["logs"].append(f"[model-eval] calling {provider}/{model_name} model...")
         r.set(run_key, json.dumps(run_data))
 
-    eval_res = run_model_eval(task_id, broken_code, endpoint, api_key)
+    eval_res = run_model_eval(task_id, broken_code, endpoint, api_key, model_name=model_name)
     # api_key is no longer needed and is not retained.
     del api_key
 

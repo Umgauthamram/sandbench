@@ -42,6 +42,8 @@ export interface SubmitInput {
   // and is never persisted to the run, leaderboard, or any log.
   modelEndpoint?: string;
   modelApiKey?: string;
+  provider?: string;
+  modelName?: string;
 }
 
 function newId(): string {

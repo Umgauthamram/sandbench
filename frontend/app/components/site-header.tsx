@@ -22,7 +22,7 @@ export function SiteHeader() {
           </Link>
           <Link
             href="/signup"
-            className="rounded-lg bg-grad-accent px-5 py-2.5 font-semibold text-zinc-950 transition-transform hover:scale-[1.02] shadow-sm shadow-orange-500/20"
+            className="rounded-lg bg-grad-accent px-5 py-2.5 font-semibold text-white transition-transform hover:scale-[1.02] shadow-sm shadow-orange-500/20"
           >
             Sign up
           </Link>

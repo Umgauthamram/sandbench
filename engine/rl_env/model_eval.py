@@ -51,6 +51,7 @@ def run_model_eval(
     broken_code: str,
     endpoint: str,
     api_key: str,
+    model_name: str = "user-model",
 ) -> Dict[str, Any]:
     """Run the user's model as a repair agent and score the improvement.
 
@@ -65,7 +66,12 @@ def run_model_eval(
     # that "run NOTHING in the sandbox on failure" holds), so error_output=None.
     prompt = _build_review_prompt(broken_code, None)
 
-    ok, content = model_client.call_user_model(endpoint, api_key, prompt)
+    ok, content = model_client.call_user_model(
+        endpoint,
+        api_key,
+        prompt,
+        model_name=model_name,
+    )
     # api_key is no longer needed past this point and is never retained.
     if not ok:
         return {

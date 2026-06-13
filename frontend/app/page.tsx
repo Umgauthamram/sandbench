@@ -40,56 +40,29 @@ export default function LandingPage() {
         <section className="relative border-b border-border overflow-hidden">
           <FluidParticlesBackground className="h-auto min-h-screen py-24 sm:py-0 sm:flex sm:items-center grid-backdrop">
             {/* Full-width inner layout */}
-            <div className="w-full px-8 sm:px-16 lg:px-24 xl:px-32 flex flex-col lg:flex-row items-center justify-between gap-16 py-24 sm:py-20">
+            <div className="w-full px-8 sm:px-16 lg:px-24 xl:px-32 flex flex-col lg:flex-row items-center justify-center gap-16 py-24 sm:py-20">
               {/* Text block */}
-              <div className="max-w-2xl space-y-7 text-center lg:text-left">
-                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-zinc-900/80 px-3.5 py-1.5 text-xs font-medium text-zinc-400 select-none backdrop-blur-sm">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Hardened ephemeral execution platform
-                </span>
+              <div className="max-w-2xl space-y-7 text-center">
                 <h1 className="text-5xl font-extrabold leading-tight tracking-tight text-zinc-50 sm:text-6xl xl:text-7xl">
-                  Benchmark untrusted code in a{" "}
-                  <span className="text-grad-accent">throwaway sandbox</span>.
+                  Benchmark untrusted code in a
+                  <span className="text-grad-accent"> throwaway sandbox</span>.
                 </h1>
                 <p className="text-xl leading-relaxed text-zinc-400">
                   Submit untrusted code. Get a verdict, a score, and an automatic repair — all in a hardened sandbox.
                 </p>
-                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 pt-2">
+                <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
                   <Link
                     href="/dashboard"
-                    className="inline-flex items-center gap-2 rounded-xl bg-grad-accent px-8 py-3.5 text-base font-semibold text-zinc-950 transition-transform hover:scale-[1.02] shadow-lg shadow-orange-500/20"
+                    className="inline-flex items-center gap-2 rounded-xl bg-grad-accent px-8 py-3.5 text-base font-semibold text-white transition-transform hover:scale-[1.02] shadow-lg shadow-orange-500/20"
                   >
                     Enter platform <ArrowRight className="h-4 w-4" />
                   </Link>
                   <Link
                     href="/signup"
-                    className="rounded-xl border border-border bg-zinc-900/60 px-8 py-3.5 text-base font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 backdrop-blur-sm"
+                    className="rounded-xl border border-border bg-zinc-900/60 px-8 py-3.5 text-base font-semibold text-white transition-colors hover:bg-zinc-800 backdrop-blur-sm"
                   >
                     Create account
                   </Link>
-                </div>
-              </div>
-              
-              {/* Visual Decorative Terminal Box */}
-              <div className="w-full max-w-md rounded-2xl border border-border bg-zinc-900/80 p-7 shadow-2xl relative overflow-hidden group backdrop-blur-md flex-shrink-0">
-                <div className="absolute top-0 right-0 h-48 w-48 bg-grad-accent rounded-full blur-3xl opacity-10 group-hover:opacity-20 transition-opacity duration-700" />
-                <div className="flex items-center justify-between border-b border-border pb-4 mb-5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/80" />
-                    <span className="h-2.5 w-2.5 rounded-full bg-green-500/80" />
-                  </div>
-                  <span className="font-mono text-xs text-zinc-500">sandbox_host_01</span>
-                </div>
-                <div className="font-mono text-xs text-zinc-400 space-y-2.5">
-                  <p className="text-zinc-600"># Enqueueing job...</p>
-                  <p className="text-blue-400">$ sandbench run --task fizzbuzz</p>
-                  <p className="text-zinc-500">[sandbox] spawning python:3.11-slim (hardened)</p>
-                  <p className="text-zinc-500">[sandbox] applying resource limits...</p>
-                  <p className="text-zinc-500">[sandbox] dropping capabilities (ALL)</p>
-                  <p className="text-emerald-400">[run] 5/5 tests passed successfully</p>
-                  <p className="text-zinc-500">[sandbox] container destroyed</p>
-                  <p className="text-orange-400 font-semibold mt-5">VERDICT: CLEAN (score 1.0)</p>
                 </div>
               </div>
             </div>
