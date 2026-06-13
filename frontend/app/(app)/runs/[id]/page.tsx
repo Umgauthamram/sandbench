@@ -55,7 +55,7 @@ export default async function RunDetailPage({
           {typeof run.score === "number" && (
             <>
               {" · "}
-              <span className="text-zinc-200">score {run.score}</span>
+              <span className="text-zinc-200">score {Math.round(run.score * 100)}%</span>
             </>
           )}
         </p>

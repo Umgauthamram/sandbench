@@ -53,7 +53,9 @@ export function RunList({ runs }: { runs: Run[] }) {
                 <VerdictBadge verdict={run.verdict} />
               </td>
               <td className="px-4 py-3 text-right font-medium text-zinc-200">
-                {run.score ?? "—"}
+                {typeof run.score === "number"
+                  ? `${Math.round(run.score * 100)}%`
+                  : "—"}
               </td>
             </tr>
           ))}

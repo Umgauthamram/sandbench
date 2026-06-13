@@ -16,6 +16,8 @@ from config import UPSTASH_REDIS_URL, LLM_PROVIDER
 from sandbox import runner, static_gate, monitor, review
 from sandbox.rules import Severity, Flag
 from analysis import trace_log
+from scoring import registry as task_registry
+from scoring import score as scorer
 
 # Initialize logging as required
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -67,7 +69,7 @@ def handle(job: dict) -> None:
                 "run_id": run_id,
                 "status": "quarantined",
                 "verdict": "malicious",
-                "score": 0,
+                "score": 0.0,
                 "flags": [f.to_dict() for f in flags],
                 "stdout": "",
                 "stderr": "",
@@ -80,7 +82,7 @@ def handle(job: dict) -> None:
             if run_data:
                 run_data["status"] = "quarantined"
                 run_data["verdict"] = "malicious"
-                run_data["score"] = 0
+                run_data["score"] = 0.0
                 run_data["finishedAt"] = result["finished_at"]
                 run_data["flags"] = [
                     {
@@ -116,13 +118,50 @@ def handle(job: dict) -> None:
 
             # Determine final verdict and status
             if any(f.severity == Severity.HIGH for f in flags):
-                verdict, status, score = "malicious", "quarantined", 0
+                verdict, status, score = "malicious", "quarantined", 0.0
             elif run_res.exit_code != 0 or run_res.timed_out:
                 verdict, status, score = "broken", "done", None
             else:
                 verdict, status, score = "clean", "done", None
 
-            # D) Run analysis engine (WP3) for clean/broken runs
+            # D) Score clean runs against hidden test suite
+            if verdict == "clean":
+                task_id = job.get("taskId") or ""
+                task = task_registry.get_task(task_id)
+                if task and task.language == language:
+                    try:
+                        if run_data:
+                            run_data["logs"].append("[scoring] running hidden test suite...")
+                            r.set(run_key, json.dumps(run_data))
+
+                        score_res = scorer.score_submission(code, task)
+                        score = score_res["score"]
+                        passed = score_res.get("passed", 0)
+                        total = score_res.get("total", 0)
+                        logger.info(
+                            "Scoring for %s: %d/%d passed, score=%.2f",
+                            run_id, passed, total, score,
+                        )
+                        if run_data:
+                            run_data["logs"].append(
+                                f"[scoring] {passed}/{total} tests passed (score {score:.2f})"
+                            )
+                    except Exception as score_err:
+                        logger.exception("Scoring failed for run %s: %s", run_id, score_err)
+                        score = 0.0
+                elif task_id and not task:
+                    logger.warning("Unknown taskId '%s' for run %s — scoring skipped", task_id, run_id)
+                elif task and task.language != language:
+                    logger.warning(
+                        "Task %s language mismatch (%s vs %s) for run %s — scoring skipped",
+                        task_id, task.language, language, run_id,
+                    )
+            elif verdict == "broken":
+                score = 0.0
+            elif verdict == "malicious":
+                score = 0.0
+
+            # E) Run analysis engine (WP3) for clean/broken runs
             suggestions = []
             if verdict in ("clean", "broken"):
                 try:
@@ -211,6 +250,32 @@ def handle(job: dict) -> None:
         # Write exact JSON contract back to Redis
         r.set(f"sandbench:run:{run_id}", json.dumps(result))
         logger.info("Job %s completed with status %s and verdict %s", run_id, result["status"], result["verdict"])
+
+        # Write leaderboard entry for scored clean runs
+        if result.get("verdict") == "clean" and isinstance(result.get("score"), (int, float)):
+            try:
+                entry = {
+                    "rank": 0,  # will be recalculated on read
+                    "user": "anon",
+                    "submissionId": run_data.get("submissionId", f"sub_{run_id[4:]}") if run_data else f"sub_{run_id[4:]}",
+                    "taskId": job.get("taskId") or "",
+                    "taskTitle": run_data.get("taskTitle", job.get("taskId", "")) if run_data else job.get("taskId", ""),
+                    "score": result["score"],
+                    "verdict": "clean",
+                    "createdAt": result["finished_at"],
+                }
+                # Append to leaderboard list in Redis
+                lb_raw = r.get("leaderboard")
+                lb: list = json.loads(lb_raw) if lb_raw else []
+                lb.append(entry)
+                # Sort descending by score, re-rank
+                lb.sort(key=lambda e: e.get("score", 0), reverse=True)
+                for idx, e in enumerate(lb):
+                    e["rank"] = idx + 1
+                r.set("leaderboard", json.dumps(lb))
+                logger.info("Leaderboard entry added for run %s (score %.2f)", run_id, result["score"])
+            except Exception as lb_err:
+                logger.exception("Failed to update leaderboard for run %s: %s", run_id, lb_err)
 
     except Exception as e:
         logger.exception("Unexpected error handling job %s: %s", run_id, e)

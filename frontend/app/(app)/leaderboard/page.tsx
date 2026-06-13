@@ -37,7 +37,9 @@ export default async function LeaderboardPage() {
                   <VerdictBadge verdict={e.verdict} />
                 </td>
                 <td className="px-4 py-3 text-right font-semibold text-zinc-100">
-                  {e.score}
+                  {typeof e.score === "number"
+                    ? `${Math.round(e.score * 100)}%`
+                    : "—"}
                 </td>
               </tr>
             ))}

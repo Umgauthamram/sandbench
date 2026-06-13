@@ -16,7 +16,7 @@ export default async function DashboardPage() {
   const avg =
     scored.length > 0
       ? Math.round(
-          scored.reduce((s, r) => s + (r.score ?? 0), 0) / scored.length,
+          (scored.reduce((s, r) => s + (r.score ?? 0), 0) / scored.length) * 100,
         )
       : 0;
 
@@ -39,7 +39,7 @@ export default async function DashboardPage() {
         <Stat label="Total runs" value={total} />
         <Stat label="Clean" value={clean} />
         <Stat label="Quarantined" value={quarantined} />
-        <Stat label="Avg score" value={avg} />
+        <Stat label="Avg score" value={`${avg}%`} />
       </div>
 
       <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">

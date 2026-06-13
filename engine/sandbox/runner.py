@@ -116,8 +116,25 @@ def cleanup_orphans(docker_client: docker.DockerClient) -> None:
         logger.error("Error during orphan cleanup: %s", e)
 
 
-def run(code: str, language: str = "python", image: Optional[str] = None) -> RunResult:
-    """Run code inside a hardened, throwaway container and return a RunResult."""
+def run(
+    code: str,
+    language: str = "python",
+    image: Optional[str] = None,
+    extra_files: Optional[Dict[str, str]] = None,
+    command: Optional[List[str]] = None,
+) -> RunResult:
+    """Run code inside a hardened, throwaway container and return a RunResult.
+
+    Args:
+        code: Source code to execute.
+        language: Language identifier ("python" or "node").
+        image: Docker image override. Defaults by language.
+        extra_files: Optional mapping of {container_abs_path: file_contents}
+            to copy into the container alongside the solution file. Keys are
+            absolute container paths like "/workspace/tests/test_solution.py".
+        command: Optional command override. If None, uses the default
+            language-specific run command.
+    """
     container = None
     timed_out = False
     oom_killed = False
@@ -132,7 +149,7 @@ def run(code: str, language: str = "python", image: Optional[str] = None) -> Run
     if not image:
         image = "node:20-slim" if lang == "node" else "python:3.11-slim"
     file_name = "solution.js" if lang == "node" else "solution.py"
-    run_cmd = (
+    run_cmd = command if command is not None else (
         ["node", f"/workspace/{file_name}"] if lang == "node"
         else ["python", f"/workspace/{file_name}"]
     )
@@ -169,6 +186,21 @@ def run(code: str, language: str = "python", image: Optional[str] = None) -> Run
             info.size = len(code_bytes)
             info.mode = 0o755
             tar.addfile(info, io.BytesIO(code_bytes))
+
+            # Add any extra files (e.g. hidden test suites for scoring).
+            if extra_files:
+                for container_path, contents in extra_files.items():
+                    # put_archive extracts relative to /workspace, so strip
+                    # that prefix. e.g. "/workspace/tests/foo.py" -> "tests/foo.py"
+                    member_name = container_path.lstrip("/")
+                    if member_name.startswith("workspace/"):
+                        member_name = member_name[len("workspace/"):]
+                    file_bytes = contents.encode("utf-8")
+                    ti = tarfile.TarInfo(name=member_name)
+                    ti.size = len(file_bytes)
+                    ti.mode = 0o644
+                    tar.addfile(ti, io.BytesIO(file_bytes))
+
         tar_stream.seek(0)
         container.put_archive("/workspace", tar_stream.getvalue())
 

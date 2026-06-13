@@ -1,0 +1,11 @@
+id: fizzbuzz
+title: FizzBuzz
+language: python
+difficulty: easy
+description: >
+  Write a function fizzbuzz(n) that returns a list of values for 1..n:
+  "FizzBuzz" for multiples of 15, "Fizz" for multiples of 3,
+  "Buzz" for multiples of 5, and the integer itself otherwise.
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction

@@ -48,6 +48,7 @@ export interface Run {
   taskTitle: string;
   status: RunStatus;
   verdict?: Verdict;
+  /** Score as a fraction in [0.0, 1.0]. 1.0 = all tests passed. Display as percentage (×100). */
   score?: number;
   startedAt?: string;
   finishedAt?: string;
@@ -71,6 +72,7 @@ export interface LeaderboardEntry {
   submissionId: string;
   taskId: string;
   taskTitle: string;
+  /** Score as a fraction in [0.0, 1.0]. Display as percentage (×100). */
   score: number;
   verdict: Verdict;
   createdAt: string;

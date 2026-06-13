@@ -92,7 +92,12 @@ export async function createRun(input: SubmitInput): Promise<Run> {
 export async function listLeaderboard(): Promise<LeaderboardEntry[]> {
   if (!redisConfigured) return LEADERBOARD;
   const raw = await redis.get("leaderboard");
-  return raw ? (JSON.parse(raw) as LeaderboardEntry[]) : [];
+  if (!raw) return [];
+  const entries = JSON.parse(raw) as LeaderboardEntry[];
+  // Ensure sorted by score descending with ranks assigned
+  entries.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  entries.forEach((e, i) => { e.rank = i + 1; });
+  return entries;
 }
 
 export async function listTasks(): Promise<BenchmarkTask[]> {
