@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { createRun, type SubmitInput } from "../../lib/store";
 import type { SubmissionType } from "../../lib/types";
+import { getCurrentUser } from "../../lib/auth";
+
+export const dynamic = "force-dynamic";
 
 const VALID_TYPES: SubmissionType[] = ["code", "files", "api", "model"];
 const MAX_PAYLOAD = 256 * 1024;
 
 export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: Partial<SubmitInput>;
   try {
     body = await request.json();

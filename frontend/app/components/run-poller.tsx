@@ -75,9 +75,11 @@ export function RunStream({ id, initialLogs, initialStatus }: RunStreamProps) {
           </span>
         )}
       </div>
-      <pre className="max-h-80 overflow-auto rounded-lg bg-background p-4 font-mono text-xs leading-6 text-zinc-300">
+      <pre className="max-h-80 overflow-auto rounded-lg bg-zinc-950 border border-zinc-800 p-4 font-mono text-xs leading-6 text-zinc-300">
         {logs.join("\n")}
-        {isRunning && <span className="text-accent">{"\n▍"}</span>}
+        {isRunning && (
+          <span className="inline-block ml-0.5 h-3 w-1.5 bg-blue-400 animate-pulse align-middle" />
+        )}
       </pre>
     </Card>
   );

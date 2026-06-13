@@ -14,29 +14,42 @@ export default async function LeaderboardPage() {
         title="Leaderboard"
         subtitle="Top submissions per task. Quarantined runs score 0."
       />
-      <div className="overflow-hidden rounded-xl border border-border">
+      <div className="overflow-hidden rounded-xl border border-zinc-800">
         <table className="w-full text-sm">
-          <thead className="bg-panel text-left text-xs uppercase tracking-wide text-zinc-500">
+          <thead className="bg-zinc-900/80 text-left text-xs uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
             <tr>
-              <th className="px-4 py-3 font-medium">#</th>
-              <th className="px-4 py-3 font-medium">User</th>
-              <th className="px-4 py-3 font-medium">Task</th>
-              <th className="hidden px-4 py-3 font-medium sm:table-cell">
+              <th className="px-4 py-3.5 font-medium">#</th>
+              <th className="px-4 py-3.5 font-medium">User</th>
+              <th className="px-4 py-3.5 font-medium">Task</th>
+              <th className="hidden px-4 py-3.5 font-medium sm:table-cell">
                 Verdict
               </th>
-              <th className="px-4 py-3 text-right font-medium">Score</th>
+              <th className="px-4 py-3.5 text-right font-medium">Score</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
-            {entries.map((e) => (
-              <tr key={e.submissionId} className="bg-background">
-                <td className="px-4 py-3 font-mono text-zinc-500">{e.rank}</td>
-                <td className="px-4 py-3 font-medium text-zinc-200">{e.user}</td>
-                <td className="px-4 py-3 text-zinc-300">{e.taskTitle}</td>
-                <td className="hidden px-4 py-3 sm:table-cell">
+          <tbody className="divide-y divide-zinc-800/60">
+            {entries.map((e, i) => (
+              <tr
+                key={e.submissionId}
+                className={`transition-colors hover:bg-zinc-800/40 ${
+                  i === 0
+                    ? "bg-orange-500/5"
+                    : i === 1
+                    ? "bg-zinc-400/5"
+                    : i === 2
+                    ? "bg-amber-800/5"
+                    : "bg-zinc-900/30"
+                }`}
+              >
+                <td className="px-4 py-3.5 font-mono text-zinc-500 tabular-nums">
+                  {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : e.rank}
+                </td>
+                <td className="px-4 py-3.5 font-semibold text-zinc-200">{e.user}</td>
+                <td className="px-4 py-3.5 text-zinc-400">{e.taskTitle}</td>
+                <td className="hidden px-4 py-3.5 sm:table-cell">
                   <VerdictBadge verdict={e.verdict} />
                 </td>
-                <td className="px-4 py-3 text-right font-semibold text-zinc-100">
+                <td className="px-4 py-3.5 text-right font-bold text-zinc-100 tabular-nums">
                   {typeof e.score === "number"
                     ? `${Math.round(e.score * 100)}%`
                     : "—"}
@@ -45,6 +58,11 @@ export default async function LeaderboardPage() {
             ))}
           </tbody>
         </table>
+        {entries.length === 0 && (
+          <div className="p-12 text-center text-sm text-zinc-600">
+            No scored runs yet. Submit a solution to appear here.
+          </div>
+        )}
       </div>
     </>
   );

@@ -30,7 +30,16 @@ async function command<T = unknown>(args: (string | number)[]): Promise<T> {
 export const redis = {
   get: (key: string) => command<string | null>(["GET", key]),
   set: (key: string, value: string) => command(["SET", key, value]),
+  del: (key: string) => command<number>(["DEL", key]),
+  setex: (key: string, seconds: number, value: string) =>
+    command(["SET", key, value, "EX", seconds]),
   lpush: (key: string, value: string) => command<number>(["LPUSH", key, value]),
   lrange: (key: string, start: number, stop: number) =>
     command<string[]>(["LRANGE", key, start, stop]),
+  lrem: (key: string, count: number, value: string) =>
+    command<number>(["LREM", key, count, value]),
+  sadd: (key: string, value: string) => command<number>(["SADD", key, value]),
+  srem: (key: string, value: string) => command<number>(["SREM", key, value]),
+  smembers: (key: string) => command<string[]>(["SMEMBERS", key]),
 };
+

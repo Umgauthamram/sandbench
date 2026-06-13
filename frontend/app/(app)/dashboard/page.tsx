@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { RunList } from "../../components/run-list";
 import { PageHeader, Stat } from "../../components/ui";
 import { listRuns } from "../../lib/store";
+import { getCurrentUser } from "../../lib/auth";
 
 export const metadata: Metadata = { title: "Dashboard — SandBench" };
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const runs = await listRuns();
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  const runs = await listRuns(user.id);
   const total = runs.length;
   const quarantined = runs.filter((r) => r.verdict === "malicious").length;
   const clean = runs.filter((r) => r.verdict === "clean").length;
@@ -28,7 +34,7 @@ export default async function DashboardPage() {
         action={
           <Link
             href="/submit"
-            className="rounded-lg bg-zinc-50 px-4 py-2 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-200"
+            className="inline-flex items-center gap-2 rounded-lg bg-grad-accent px-4 py-2 text-sm font-semibold text-zinc-950 transition-transform hover:scale-[1.02] shadow-sm shadow-orange-500/10"
           >
             New submission
           </Link>

@@ -1,40 +1,33 @@
 import Link from "next/link";
 import { SiteHeader } from "./components/site-header";
-
-const STEPS = [
-  {
-    title: "Submit",
-    body: "Drop in code, files, an API endpoint, or your own model's API key — then pick a benchmark task.",
-  },
-  {
-    title: "Isolate",
-    body: "Every run gets a fresh, hardened, throwaway container from a clean golden image. Destroyed after. Never reused.",
-  },
-  {
-    title: "Branch",
-    body: "Malicious or compromised → killed, quarantined, reported. Clean but messy → static analysis + an LLM review with a patch.",
-  },
-  {
-    title: "Score",
-    body: "Each run is scored against the task and lands on the leaderboard.",
-  },
-];
+import { ShieldCheck, Trophy, Sparkles, Bot, ListTodo, ArrowRight } from "lucide-react";
+import { FluidParticlesBackground } from "../components/ui/fluid-particles-background";
 
 const FEATURES = [
   {
-    tag: "Subsystem A",
-    title: "Benchmark platform",
-    body: "Submit and get scored + analyzed in full isolation. Hardened Docker with --network none, read-only root, dropped caps, seccomp, and hard resource + wall-clock limits.",
+    icon: ShieldCheck,
+    title: "Hardened sandbox verdict",
+    body: "Every run gets executed inside an ephemeral, hardened container. We drop capabilities, enforce read-only roots, set CPU/Memory limits, and monitor for egress or escape attempts.",
   },
   {
-    tag: "Subsystem B",
-    title: "RL environment",
-    body: "The same sandbox exposed as a Gymnasium-style obs → action → reward env. A house agent runs and repairs tasks; reward is logged every step.",
+    icon: Trophy,
+    title: "Real hidden-test scoring",
+    body: "Submissions that complete successfully are scored against a private, hidden test suite. Get an accurate score represented as a fraction of tests passed.",
+  },
+  { 
+    icon: Sparkles,
+    title: "LLM review & patch suggestions",
+    body: "Clean but failing submissions are automatically reviewed by an LLM model, producing suggestions and a concrete patch diff to fix the bug.",
   },
   {
-    tag: "The core branch",
-    title: "Malicious vs. messy",
-    body: "Any high-severity flag — egress attempt, filesystem escape, YARA hit, OOM/fork-bomb — quarantines the run. Everything else routes to analysis for concrete fixes.",
+    icon: Bot,
+    title: "RL repair-and-rescore loop",
+    body: "Our repair pipeline automatically applies the suggested patches, re-runs the code in the sandbox, and computes the exact reward/improvement score.",
+  },
+  {
+    icon: ListTodo,
+    title: "Live leaderboard & playground",
+    body: "Deduplicated scores are posted to a live leaderboard. Visualize repair trajectories, step-by-step rollout animations, and cumulative rewards in the RL playground.",
   },
 ];
 
@@ -42,114 +35,122 @@ export default function LandingPage() {
   return (
     <>
       <SiteHeader />
-      <main className="flex-1">
-        {/* Hero */}
-        <section className="grid-backdrop relative border-b border-border">
-          <div className="mx-auto w-full max-w-6xl px-6 py-24 sm:py-32">
-            <span className="inline-flex items-center gap-2 rounded-full border border-border bg-panel px-3 py-1 text-xs text-zinc-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-clean" />
-              Run untrusted code without trusting it
-            </span>
-            <h1 className="mt-6 max-w-3xl text-balance text-4xl font-semibold leading-tight tracking-tight text-zinc-50 sm:text-6xl">
-              Benchmark anything in a{" "}
-              <span className="text-accent">throwaway sandbox</span>.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-400">
-              Submit code, files, an API, or your own model. SandBench runs it
-              in a fresh hardened container, watches its behaviour, kills
-              anything malicious, reviews what&apos;s messy, and scores it on a
-              leaderboard.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href="/signup"
-                className="rounded-lg bg-zinc-50 px-5 py-3 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-200"
-              >
-                Get started
-              </Link>
-              <Link
-                href="/dashboard"
-                className="rounded-lg border border-border bg-panel px-5 py-3 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-800"
-              >
-                Open the demo dashboard →
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* How it works */}
-        <section className="mx-auto w-full max-w-6xl px-6 py-20">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
-            One pipe, end to end
-          </h2>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map((s, i) => (
-              <div
-                key={s.title}
-                className="rounded-xl border border-border bg-panel p-5"
-              >
-                <div className="text-sm font-mono text-accent">
-                  0{i + 1}
-                </div>
-                <h3 className="mt-3 text-lg font-semibold text-zinc-50">
-                  {s.title}
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-zinc-400">{s.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Subsystems */}
-        <section className="border-t border-border bg-panel/40">
-          <div className="mx-auto grid w-full max-w-6xl gap-4 px-6 py-20 lg:grid-cols-3">
-            {FEATURES.map((f) => (
-              <div
-                key={f.title}
-                className="rounded-xl border border-border bg-panel p-6"
-              >
-                <span className="text-xs font-medium uppercase tracking-wide text-accent">
-                  {f.tag}
+      <main className="flex-1 bg-zinc-950">
+        {/* Hero — full viewport width, no max-width cap */}
+        <section className="relative border-b border-border overflow-hidden">
+          <FluidParticlesBackground className="h-auto min-h-screen py-24 sm:py-0 sm:flex sm:items-center grid-backdrop">
+            {/* Full-width inner layout */}
+            <div className="w-full px-8 sm:px-16 lg:px-24 xl:px-32 flex flex-col lg:flex-row items-center justify-between gap-16 py-24 sm:py-20">
+              {/* Text block */}
+              <div className="max-w-2xl space-y-7 text-center lg:text-left">
+                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-zinc-900/80 px-3.5 py-1.5 text-xs font-medium text-zinc-400 select-none backdrop-blur-sm">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Hardened ephemeral execution platform
                 </span>
-                <h3 className="mt-3 text-xl font-semibold text-zinc-50">
-                  {f.title}
-                </h3>
-                <p className="mt-3 text-sm leading-6 text-zinc-400">{f.body}</p>
+                <h1 className="text-5xl font-extrabold leading-tight tracking-tight text-zinc-50 sm:text-6xl xl:text-7xl">
+                  Benchmark untrusted code in a{" "}
+                  <span className="text-grad-accent">throwaway sandbox</span>.
+                </h1>
+                <p className="text-xl leading-relaxed text-zinc-400">
+                  Submit untrusted code. Get a verdict, a score, and an automatic repair — all in a hardened sandbox.
+                </p>
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 pt-2">
+                  <Link
+                    href="/dashboard"
+                    className="inline-flex items-center gap-2 rounded-xl bg-grad-accent px-8 py-3.5 text-base font-semibold text-zinc-950 transition-transform hover:scale-[1.02] shadow-lg shadow-orange-500/20"
+                  >
+                    Enter platform <ArrowRight className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="rounded-xl border border-border bg-zinc-900/60 px-8 py-3.5 text-base font-semibold text-zinc-200 transition-colors hover:bg-zinc-800 backdrop-blur-sm"
+                  >
+                    Create account
+                  </Link>
+                </div>
               </div>
-            ))}
+              
+              {/* Visual Decorative Terminal Box */}
+              <div className="w-full max-w-md rounded-2xl border border-border bg-zinc-900/80 p-7 shadow-2xl relative overflow-hidden group backdrop-blur-md flex-shrink-0">
+                <div className="absolute top-0 right-0 h-48 w-48 bg-grad-accent rounded-full blur-3xl opacity-10 group-hover:opacity-20 transition-opacity duration-700" />
+                <div className="flex items-center justify-between border-b border-border pb-4 mb-5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-yellow-500/80" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-green-500/80" />
+                  </div>
+                  <span className="font-mono text-xs text-zinc-500">sandbox_host_01</span>
+                </div>
+                <div className="font-mono text-xs text-zinc-400 space-y-2.5">
+                  <p className="text-zinc-600"># Enqueueing job...</p>
+                  <p className="text-blue-400">$ sandbench run --task fizzbuzz</p>
+                  <p className="text-zinc-500">[sandbox] spawning python:3.11-slim (hardened)</p>
+                  <p className="text-zinc-500">[sandbox] applying resource limits...</p>
+                  <p className="text-zinc-500">[sandbox] dropping capabilities (ALL)</p>
+                  <p className="text-emerald-400">[run] 5/5 tests passed successfully</p>
+                  <p className="text-zinc-500">[sandbox] container destroyed</p>
+                  <p className="text-orange-400 font-semibold mt-5">VERDICT: CLEAN (score 1.0)</p>
+                </div>
+              </div>
+            </div>
+          </FluidParticlesBackground>
+        </section>
+
+        {/* Features — full width with controlled padding */}
+        <section className="w-full px-8 sm:px-16 lg:px-24 xl:px-32 py-24 bg-zinc-950">
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-blue-400">
+              Core Capabilities
+            </h2>
+            <p className="mt-3 text-3xl font-bold tracking-tight text-zinc-50">
+              One secure pipeline, from evaluation to repair
+            </p>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {FEATURES.map((f) => {
+              const Icon = f.icon;
+              return (
+                <div
+                  key={f.title}
+                  className="rounded-xl border border-border bg-zinc-900 p-6 space-y-4 hover:border-zinc-700 hover:bg-zinc-900/80 transition-all duration-200 group"
+                >
+                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 group-hover:bg-blue-500/20 transition-colors">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-base font-semibold text-zinc-50">
+                    {f.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed text-zinc-400">
+                    {f.body}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </section>
 
-        {/* CTA */}
-        <section className="mx-auto w-full max-w-6xl px-6 py-24 text-center">
-          <h2 className="text-3xl font-semibold tracking-tight text-zinc-50">
-            Treat every submission as hostile.
-          </h2>
-          <p className="mx-auto mt-4 max-w-xl text-zinc-400">
-            Clone if affected: never repair a dirty container. Spawn a clean one
-            from the golden snapshot, run, score, destroy.
-          </p>
-          <div className="mt-8 flex justify-center gap-3">
-            <Link
-              href="/signup"
-              className="rounded-lg bg-accent px-5 py-3 text-sm font-medium text-zinc-950 transition-colors hover:bg-indigo-300"
-            >
-              Create an account
-            </Link>
-            <Link
-              href="/leaderboard"
-              className="rounded-lg border border-border bg-panel px-5 py-3 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-800"
-            >
-              View leaderboard
-            </Link>
+        {/* Stats bar */}
+        <section className="border-t border-border bg-zinc-900/30">
+          <div className="w-full px-8 sm:px-16 lg:px-24 xl:px-32 py-12 grid grid-cols-2 sm:grid-cols-4 gap-8 text-center">
+            {[
+              { label: "Sandbox isolation", value: "Docker + seccomp" },
+              { label: "Scoring method", value: "Hidden test suite" },
+              { label: "Repair loop", value: "LLM + RL reward" },
+              { label: "Leaderboard", value: "Real-time" },
+            ].map((s) => (
+              <div key={s.label}>
+                <p className="text-2xl font-bold text-zinc-50">{s.value}</p>
+                <p className="mt-1 text-xs uppercase tracking-wide text-zinc-500">{s.label}</p>
+              </div>
+            ))}
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-sm text-zinc-500">
+      <footer className="border-t border-border bg-zinc-950">
+        <div className="w-full px-8 sm:px-16 lg:px-24 xl:px-32 flex flex-col sm:flex-row items-center justify-between gap-4 py-10 text-sm text-zinc-500">
           <span>SandBench — isolated code benchmarking & RL environment</span>
-          <span>Built for a 30-hour sprint. MVP isolation: hardened Docker.</span>
+          <span>Built for evaluation of untrusted agentic actions. Hardened Docker sandbox.</span>
         </div>
       </footer>
     </>

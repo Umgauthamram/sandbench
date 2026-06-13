@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { listRepairRuns } from "../../lib/store";
 import { PageHeader } from "../../components/ui";
 import { RolloutReplay } from "../../components/rollout-replay";
+import { getCurrentUser } from "../../lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +16,11 @@ const ACTION_SPACE = [
 ];
 
 export default async function PlaygroundPage() {
-  const rollouts = await listRepairRuns();
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  const rollouts = await listRepairRuns(user.id);
 
   return (
     <>
@@ -76,7 +82,7 @@ export default async function PlaygroundPage() {
               </p>
               <Link
                 href="/submit"
-                className="mt-4 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-zinc-950 transition-colors hover:bg-indigo-300"
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-grad-accent px-4 py-2 text-sm font-semibold text-zinc-950 transition-transform hover:scale-[1.02] shadow-sm shadow-orange-500/10"
               >
                 Submit a run
               </Link>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Run } from "../lib/types";
+import { ChevronRight, ArrowRight } from "lucide-react";
 
 const ACTION_SPACE = [
   "run_tests",
@@ -92,7 +93,7 @@ export function RolloutReplay({ rollouts }: { rollouts: Run[] }) {
             <p className="text-xs uppercase tracking-wide text-zinc-500">
               Cumulative reward
             </p>
-            <p className="mt-1 text-2xl font-semibold text-zinc-50">
+            <p className="mt-1 text-2xl font-semibold text-zinc-50 tabular-nums">
               {cumulative >= 0 ? "+" : ""}
               {cumulative.toFixed(2)}
             </p>
@@ -132,11 +133,11 @@ export function RolloutReplay({ rollouts }: { rollouts: Run[] }) {
                     {r.taskTitle}
                   </div>
                   <div className="mt-2 flex items-center justify-between">
-                    <span className="text-[10px] text-zinc-400">
+                    <span className="text-[10px] text-zinc-400 tabular-nums">
                       {Math.round(rScoreBefore * 100)}% → {Math.round(rScoreAfter * 100)}%
                     </span>
                     <span
-                      className={`font-mono font-semibold ${
+                      className={`font-mono font-semibold tabular-nums ${
                         rReward >= 0 ? "text-clean" : "text-broken"
                       }`}
                     >
@@ -160,7 +161,7 @@ export function RolloutReplay({ rollouts }: { rollouts: Run[] }) {
               <button
                 onClick={startReplay}
                 disabled={running}
-                className="rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-zinc-950 transition-colors hover:bg-indigo-300 disabled:opacity-60"
+                className="rounded-lg bg-blue-500 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-400 disabled:opacity-60"
               >
                 {running ? "Rolling out…" : "Run rollout"}
               </button>
@@ -177,7 +178,7 @@ export function RolloutReplay({ rollouts }: { rollouts: Run[] }) {
                       t={s.t}
                     </span>
                     <span
-                      className={`font-mono text-sm font-semibold ${
+                      className={`font-mono text-sm font-semibold tabular-nums ${
                         s.reward >= 0 ? "text-clean" : "text-broken"
                       }`}
                     >
@@ -185,8 +186,8 @@ export function RolloutReplay({ rollouts }: { rollouts: Run[] }) {
                       {s.reward.toFixed(2)}
                     </span>
                   </div>
-                  <div className="mt-1 font-mono text-sm text-accent">
-                    → {s.action}
+                  <div className="mt-1 font-mono text-xs text-accent flex items-center gap-1 select-none">
+                    <ArrowRight className="h-3 w-3" /> {s.action}
                   </div>
                   <div className="mt-1 text-sm text-zinc-400">{s.obs}</div>
                 </li>
@@ -198,8 +199,8 @@ export function RolloutReplay({ rollouts }: { rollouts: Run[] }) {
           {patchDiff && (
             <div className="mt-6 border-t border-border pt-4">
               <details className="group">
-                <summary className="cursor-pointer text-xs font-medium text-zinc-500 hover:text-zinc-300 outline-none select-none flex items-center gap-1.5">
-                  <span className="transition-transform group-open:rotate-90">▶</span>
+                <summary className="cursor-pointer text-xs font-semibold text-zinc-500 hover:text-zinc-300 outline-none select-none flex items-center gap-1.5">
+                  <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90 text-zinc-500 shrink-0" />
                   Show suggested patch diff
                 </summary>
                 <pre className="mt-3 overflow-auto rounded-lg bg-background p-4 font-mono text-xs leading-6 max-h-[200px]">

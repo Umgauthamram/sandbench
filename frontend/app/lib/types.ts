@@ -65,7 +65,20 @@ export interface Run {
   suggestions: Suggestion[];
   logs: string[];
   repair?: RunRepair;
+  userId?: string;
+  userName?: string;
 }
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  passwordHash: string; // never sent to client
+  createdAt: string;
+}
+
+// Safe projection (no passwordHash):
+export type SafeUser = Omit<User, "passwordHash">;
 
 export interface BenchmarkTask {
   id: string;

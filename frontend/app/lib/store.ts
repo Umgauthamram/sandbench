@@ -11,6 +11,7 @@
 
 import { redis, redisConfigured } from "./redis";
 import { LEADERBOARD, RUNS, TASKS } from "./mock";
+import { getCurrentUser } from "./auth";
 import type {
   BenchmarkTask,
   LeaderboardEntry,
@@ -39,12 +40,20 @@ function newId(): string {
   return "run_" + crypto.randomUUID().replace(/-/g, "").slice(0, 8);
 }
 
-export async function listRuns(): Promise<Run[]> {
-  if (!redisConfigured) return mem.order.map((id) => mem.runs.get(id)!);
-  const ids = await redis.lrange(RUNS_INDEX, 0, 49);
+export async function listRuns(userId?: string): Promise<Run[]> {
+  if (!redisConfigured) {
+    const runs = mem.order.map((id) => mem.runs.get(id)!);
+    if (userId) return runs.filter((r) => r.userId === userId);
+    return runs;
+  }
+  const ids = await redis.lrange(RUNS_INDEX, 0, 99);
   if (!ids?.length) return [];
   const runs = await Promise.all(ids.map(getRun));
-  return runs.filter((r): r is Run => r !== null);
+  const filtered = runs.filter((r): r is Run => r !== null);
+  if (userId) {
+    return filtered.filter((r) => r.userId === userId);
+  }
+  return filtered;
 }
 
 export async function getRun(id: string): Promise<Run | null> {
@@ -59,6 +68,10 @@ export async function createRun(input: SubmitInput): Promise<Run> {
   const language: Language = task?.language ?? "python";
   const id = newId();
 
+  const user = await getCurrentUser();
+  const userId = user?.id;
+  const userName = user?.name;
+
   const run: Run = {
     id,
     submissionId: "sub_" + id.slice(4),
@@ -71,6 +84,8 @@ export async function createRun(input: SubmitInput): Promise<Run> {
     suggestions: [],
     logs: ["[gateway] submission accepted, job enqueued"],
     startedAt: new Date().toISOString(),
+    userId,
+    userName,
   };
 
   if (!redisConfigured) {
@@ -85,7 +100,7 @@ export async function createRun(input: SubmitInput): Promise<Run> {
   // can copy it into the sandbox.
   await redis.lpush(
     JOB_QUEUE,
-    JSON.stringify({ runId: id, language, ...input }),
+    JSON.stringify({ runId: id, language, userId, userName, ...input }),
   );
   return run;
 }
@@ -115,8 +130,8 @@ export async function listTasks(): Promise<BenchmarkTask[]> {
   return TASKS;
 }
 
-export async function listRepairRuns(): Promise<Run[]> {
-  const runs = await listRuns();
+export async function listRepairRuns(userId?: string): Promise<Run[]> {
+  const runs = await listRuns(userId);
   return runs
     .filter((r) => r.repair?.attempted === true)
     .slice(0, 20);

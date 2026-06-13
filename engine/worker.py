@@ -337,7 +337,8 @@ def handle(job: dict) -> None:
             try:
                 entry = {
                     "rank": 0,  # will be recalculated on read
-                    "user": "anon",
+                    "user": job.get("userName") or "anon",
+                    "userId": job.get("userId") or "",
                     "submissionId": run_data.get("submissionId", f"sub_{run_id[4:]}") if run_data else f"sub_{run_id[4:]}",
                     "taskId": job.get("taskId") or "",
                     "taskTitle": run_data.get("taskTitle", job.get("taskId", "")) if run_data else job.get("taskId", ""),
@@ -351,7 +352,14 @@ def handle(job: dict) -> None:
                 
                 existing_idx = -1
                 for idx, e in enumerate(lb):
-                    if e.get("user") == entry["user"] and e.get("taskId") == entry["taskId"]:
+                    e_uid = e.get("userId")
+                    entry_uid = entry.get("userId")
+                    if e_uid and entry_uid:
+                        user_match = e_uid == entry_uid
+                    else:
+                        user_match = e.get("user") == entry["user"]
+
+                    if user_match and e.get("taskId") == entry["taskId"]:
                         existing_idx = idx
                         break
                 

@@ -9,29 +9,55 @@ type Mode = "login" | "signup";
 export function AuthForm({ mode }: { mode: Mode }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const isSignup = mode === "signup";
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setError(null);
     setSubmitting(true);
-    // TODO: POST to the gateway's /auth/login or /auth/signup endpoint,
-    //       store the session token, then redirect.
-    await new Promise((r) => setTimeout(r, 600));
-    router.push("/dashboard");
+
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+    const name = isSignup ? (formData.get("name") as string) : "";
+
+    try {
+      const endpoint = isSignup ? "/api/auth/signup" : "/api/auth/login";
+      const payload = isSignup ? { email, name, password } : { email, password };
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Something went wrong. Please try again.");
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err: any) {
+      setError(err.message);
+      setSubmitting(false);
+    }
   }
 
   return (
     <div>
-      <h1 className="text-xl font-semibold tracking-tight text-zinc-50">
+      <h1 className="text-2xl font-bold tracking-tight text-zinc-50">
         {isSignup ? "Create your account" : "Welcome back"}
       </h1>
-      <p className="mt-1 text-sm text-zinc-400">
+      <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
         {isSignup
           ? "Start benchmarking submissions in isolation."
           : "Log in to submit and track your runs."}
       </p>
 
-      <form onSubmit={onSubmit} className="mt-6 space-y-4">
+      <form onSubmit={onSubmit} className="mt-8 space-y-5">
         {isSignup && (
           <Field
             label="Name"
@@ -39,6 +65,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
             type="text"
             placeholder="Ada Lovelace"
             autoComplete="name"
+            required
           />
         )}
         <Field
@@ -58,10 +85,17 @@ export function AuthForm({ mode }: { mode: Mode }) {
           required
         />
 
+        {error && (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-400 select-none leading-relaxed">
+            <p className="font-semibold">Error</p>
+            <p className="mt-0.5">{error}</p>
+          </div>
+        )}
+
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-lg bg-zinc-50 px-4 py-2.5 text-sm font-medium text-zinc-950 transition-colors hover:bg-zinc-200 disabled:opacity-60"
+          className="w-full rounded-xl bg-grad-accent px-4 py-3 text-[15px] font-bold text-zinc-950 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 shadow-md shadow-orange-500/10 cursor-pointer mt-2"
         >
           {submitting
             ? "Please wait…"
@@ -71,18 +105,18 @@ export function AuthForm({ mode }: { mode: Mode }) {
         </button>
       </form>
 
-      <div className="mt-5 text-center text-sm text-zinc-400">
+      <div className="mt-6 text-center text-sm text-zinc-400">
         {isSignup ? (
           <>
             Already have an account?{" "}
-            <Link href="/login" className="font-medium text-accent hover:underline">
+            <Link href="/login" className="font-semibold text-accent hover:underline">
               Log in
             </Link>
           </>
         ) : (
           <>
             New here?{" "}
-            <Link href="/signup" className="font-medium text-accent hover:underline">
+            <Link href="/signup" className="font-semibold text-accent hover:underline">
               Create an account
             </Link>
           </>
@@ -98,12 +132,12 @@ function Field({
 }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-zinc-300">
+      <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-400">
         {label}
       </span>
       <input
         {...props}
-        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+        className="w-full rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-3 text-[15px] text-zinc-100 placeholder:text-zinc-700 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent transition-all"
       />
     </label>
   );

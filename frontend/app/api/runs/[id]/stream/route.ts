@@ -1,30 +1,44 @@
-import { NextResponse } from "next/server";
 import { getRun } from "../../../../lib/store";
+import { getCurrentUser } from "../../../../lib/auth";
 import type { SSEMessage, SSEError } from "../../../../lib/types";
 
+export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const { id } = await ctx.params;
+  const run = await getRun(id);
+  if (!run) {
+    return new Response(JSON.stringify({ error: "Run not found" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Scoping check: users can only stream their own runs
+  if (run.userId && run.userId !== user.id) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   const encoder = new TextEncoder();
   let intervalId: NodeJS.Timeout | null = null;
 
   const stream = new ReadableStream({
     async start(controller) {
-      // 1. Initial read
-      const run = await getRun(id);
-      if (!run) {
-        controller.enqueue(
-          encoder.encode(`event: error\ndata: ${JSON.stringify({ error: "not found" } as SSEError)}\n\n`)
-        );
-        controller.close();
-        return;
-      }
-
       let lastStatus = run.status;
       let lastVerdict = run.verdict ?? null;
       let lastScore = run.score ?? null;
@@ -50,7 +64,7 @@ export async function GET(
         return;
       }
 
-      // 2. Poll every 1000ms server-side
+      // Poll every 1000ms server-side
       const startTime = Date.now();
       const SAFETY_TIMEOUT_MS = 120000; // 120 seconds
 
