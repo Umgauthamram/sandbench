@@ -5,6 +5,7 @@ import { Card } from "../../../components/ui";
 import { getRun } from "../../../lib/store";
 import type { Verdict } from "../../../lib/types";
 import { RunStream } from "../../../components/run-poller";
+import { MarkdownRenderer } from "../../../components/markdown-renderer";
 import { ArrowLeft, CheckCircle2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { getCurrentUser } from "../../../lib/auth";
 
@@ -149,17 +150,17 @@ export default async function RunDetailPage({
         {run.suggestions.length > 0 && (
           <Card className="lg:col-span-2">
             <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-              Analysis & suggestions
+              Analysis &amp; suggestions
             </h2>
-            <ul className="space-y-5">
+            <ul className="space-y-6">
               {run.suggestions.map((s) => (
                 <li key={s.id}>
-                  <div className="flex items-center gap-2">
+                  <div className="mb-3 flex items-center gap-2">
                     <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
                       {s.category}
                     </span>
-                    <p className="text-sm text-zinc-300">{s.message}</p>
                   </div>
+                  <MarkdownRenderer content={s.message} />
                   {s.patchDiff && (
                     <pre className="mt-3 overflow-auto rounded-lg bg-zinc-950 p-4 font-mono text-xs leading-6 border border-zinc-800">
                       {s.patchDiff.split("\n").map((line, i) => (
