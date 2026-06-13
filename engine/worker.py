@@ -13,8 +13,9 @@ import redis
 import docker
 
 from config import UPSTASH_REDIS_URL
-from sandbox import runner, static_gate, monitor
+from sandbox import runner, static_gate, monitor, review
 from sandbox.rules import Severity, Flag
+from analysis import trace_log
 
 # Initialize logging as required
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -121,12 +122,57 @@ def handle(job: dict) -> None:
             else:
                 verdict, status, score = "clean", "done", None
 
+            # D) Run analysis engine (WP3) for clean/broken runs
+            suggestions = []
+            if verdict in ("clean", "broken"):
+                try:
+                    error_output = (run_res.stderr or "")[:4000]
+                    if verdict == "clean" and not error_output:
+                        error_output = None
+                    
+                    review_res = review.review_code(code, error_output)
+                    review_text = review_res.get("review_text", "")
+                    patch = review_res.get("patch", "")
+                    
+                    if review_text and not review_text.startswith("Error:"):
+                        sug = {
+                            "id": "sug_review",
+                            "category": "tests" if verdict == "broken" else "style",
+                            "message": review_text[:2000]
+                        }
+                        if patch and patch.strip():
+                            sug["patchDiff"] = patch
+                        suggestions.append(sug)
+                        
+                        # Log fine-tuning trace
+                        try:
+                            trace = {
+                                "trace_id": run_id,
+                                "task_id": job.get("taskId") or "",
+                                "language": language,
+                                "verdict": verdict,
+                                "broken_code": code,
+                                "error_output": error_output or "",
+                                "review_text": review_text,
+                                "patch": patch or "",
+                                "model": review.LLM_PROVIDER,
+                                "created_at": datetime.now(timezone.utc).isoformat() + "Z"
+                            }
+                            trace_log.log_trace(trace)
+                        except Exception as trace_err:
+                            logger.exception("Failed to write training trace: %s", trace_err)
+                    elif review_text.startswith("Error:"):
+                        logger.warning("Analysis engine unavailable for run %s: %s", run_id, review_text)
+                except Exception as analysis_err:
+                    logger.exception("Analysis engine execution failed for run %s: %s", run_id, analysis_err)
+
             result = {
                 "run_id": run_id,
                 "status": status,
                 "verdict": verdict,
                 "score": score,
                 "flags": [f.to_dict() for f in flags],
+                "suggestions": suggestions,
                 "stdout": run_res.stdout,
                 "stderr": run_res.stderr,
                 "duration_ms": run_res.duration_ms,
@@ -150,6 +196,7 @@ def handle(job: dict) -> None:
                     }
                     for f in flags
                 ]
+                run_data["suggestions"] = suggestions
                 run_data["logs"].append(f"[worker] container finished with exit code {run_res.exit_code}")
                 if run_res.stdout:
                     run_data["logs"].append("--- stdout ---")
@@ -157,6 +204,7 @@ def handle(job: dict) -> None:
                 if run_res.stderr:
                     run_data["logs"].append("--- stderr ---")
                     run_data["logs"].extend(run_res.stderr.splitlines())
+                run_data["logs"].append(f"[analysis] review complete ({len(suggestions)} suggestions)")
                 r.set(run_key, json.dumps(run_data))
 
         # Write exact JSON contract back to Redis

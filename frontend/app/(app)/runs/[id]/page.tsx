@@ -4,7 +4,7 @@ import { SeverityTag, StatusPill, VerdictBadge } from "../../../components/badge
 import { Card } from "../../../components/ui";
 import { getRun } from "../../../lib/store";
 import type { Verdict } from "../../../lib/types";
-import { RunPoller } from "../../../components/run-poller";
+import { RunStream } from "../../../components/run-poller";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +39,6 @@ export default async function RunDetailPage({
 
   return (
     <>
-      <RunPoller id={run.id} initialStatus={run.status} />
       <div className="mb-6">
         <Link href="/runs" className="text-sm text-zinc-500 hover:text-zinc-300">
           ← All runs
@@ -53,7 +52,7 @@ export default async function RunDetailPage({
         </div>
         <p className="mt-1 text-sm text-zinc-400">
           {run.taskTitle} · {run.type} · {run.language}
-          {run.score !== undefined && (
+          {typeof run.score === "number" && (
             <>
               {" · "}
               <span className="text-zinc-200">score {run.score}</span>
@@ -74,27 +73,7 @@ export default async function RunDetailPage({
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Live logs */}
-        <Card className="lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
-              Run logs
-            </h2>
-            {run.status === "running" && (
-              <span className="flex items-center gap-1.5 text-xs text-accent">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-                streaming
-              </span>
-            )}
-          </div>
-          {/* TODO: replace static logs with an SSE subscription to
-                    GET /runs/{id} (text/event-stream) when running. */}
-          <pre className="max-h-80 overflow-auto rounded-lg bg-background p-4 font-mono text-xs leading-6 text-zinc-300">
-            {run.logs.join("\n")}
-            {run.status === "running" && (
-              <span className="text-accent">{"\n▍"}</span>
-            )}
-          </pre>
-        </Card>
+        <RunStream id={run.id} initialLogs={run.logs} initialStatus={run.status} />
 
         {/* Security flags */}
         {run.flags.length > 0 && (

@@ -41,3 +41,5 @@ Thumbs.db
 # SandBench Temp/Build Outputs
 extracted_starter/
 *.log
+traces.jsonl
+engine/traces.jsonl

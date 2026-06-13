@@ -75,3 +75,14 @@ export interface LeaderboardEntry {
   verdict: Verdict;
   createdAt: string;
 }
+
+export interface SSEMessage {
+  status: string;
+  verdict: string | null;
+  score: number | null;
+  logLines: string[];
+}
+
+export interface SSEError {
+  error: string;
+}

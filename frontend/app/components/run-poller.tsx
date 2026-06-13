@@ -1,34 +1,84 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Card } from "./ui";
+import type { SSEMessage, SSEError } from "../lib/types";
 
-export function RunPoller({ id, initialStatus }: { id: string; initialStatus: string }) {
+interface RunStreamProps {
+  id: string;
+  initialLogs: string[];
+  initialStatus: string;
+}
+
+export function RunStream({ id, initialLogs, initialStatus }: RunStreamProps) {
   const router = useRouter();
+  const [logs, setLogs] = useState<string[]>(initialLogs);
+  const [status, setStatus] = useState<string>(initialStatus);
 
   useEffect(() => {
-    // Stop polling if the status is final
-    if (initialStatus === "done" || initialStatus === "quarantined" || initialStatus === "error") {
-      return;
-    }
+    if (["done", "quarantined", "error"].includes(initialStatus)) return;
 
-    const interval = setInterval(async () => {
+    const es = new EventSource(`/api/runs/${id}/stream`);
+    let closed = false;
+    let isFirst = true;
+    const finish = (refresh: boolean) => {
+      if (closed) return;
+      closed = true;
+      es.close();
+      if (refresh) router.refresh();
+    };
+
+    es.onmessage = (event) => {
       try {
-        const res = await fetch(`/api/runs/${id}`);
-        if (res.ok) {
-          const data = await res.json();
-          // If status changed or is still running, refresh the server component
-          if (data.run?.status !== initialStatus) {
-            router.refresh();
+        const data: SSEMessage = JSON.parse(event.data);
+        const wasFirst = isFirst;
+        isFirst = false;
+
+        if (data.logLines?.length) {
+          if (wasFirst) {
+            setLogs(data.logLines);
+          } else {
+            setLogs((prev) => [...prev, ...data.logLines]);
           }
         }
+        if (data.status) {
+          setStatus(data.status);
+        }
       } catch (err) {
-        console.error("Failed to poll run status", err);
+        console.error("Failed to parse SSE message", err);
       }
-    }, 1500);
+    };
 
-    return () => clearInterval(interval);
+    es.addEventListener("end", () => finish(true));
+    es.addEventListener("error", () => finish(true));   // custom server "error" event
+    es.onerror = () => finish(true);                    // transport-level error
+
+    return () => {
+      closed = true;
+      es.close();
+    };
   }, [id, initialStatus, router]);
 
-  return null;
+  const isRunning = status === "running" || status === "queued";
+
+  return (
+    <Card className="lg:col-span-2">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+          Run logs
+        </h2>
+        {isRunning && (
+          <span className="flex items-center gap-1.5 text-xs text-accent">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+            streaming
+          </span>
+        )}
+      </div>
+      <pre className="max-h-80 overflow-auto rounded-lg bg-background p-4 font-mono text-xs leading-6 text-zinc-300">
+        {logs.join("\n")}
+        {isRunning && <span className="text-accent">{"\n▍"}</span>}
+      </pre>
+    </Card>
+  );
 }

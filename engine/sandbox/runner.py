@@ -4,17 +4,22 @@ Every execution runs in a fresh, isolated container with strict resource limits,
 no network access, a read-only root filesystem, dropped capabilities, and a
 custom seccomp profile.
 
-Execution model (important):
-  1. Create a hardened container whose entrypoint just BLOCKS (`sleep`).
-  2. Start it — this is when the tmpfs mounts attach.
-  3. put_archive the payload INTO the now-mounted tmpfs (so it is visible).
-  4. exec the real command inside the container, streaming output, with a
-     wall-clock timeout enforced in a watcher thread.
-  5. Always force-remove the container (tmpfs is freed automatically).
-
-This avoids the classic bug where a mount attached at start shadows a payload
-written before start, and it keeps the workspace on a size-capped tmpfs so a
-submission cannot fill the host disk.
+Execution model (and why it is shaped this way):
+  - The payload is copied in with put_archive BEFORE the container starts.
+    On Docker Desktop, put_archive into a *running* container whose root is
+    read-only is rejected outright ("container rootfs is marked read-only"),
+    even when the target is a tmpfs. read_only is only enforced at start, so
+    the copy must happen before start.
+  - The code file is therefore written into the (briefly writable) root layer
+    and becomes read-only once the container starts. That is fine: the runtime
+    only ever READS solution.py.
+  - There is NO tmpfs over /workspace. A tmpfs mounted at start would shadow
+    the pre-start payload and the file would vanish. Only /tmp is a tmpfs, for
+    any runtime scratch writes.
+  - Net effect on security: read-only root + a single 16 MB /tmp tmpfs means a
+    submission cannot write anywhere else or exhaust host disk.
+  - The container's CMD runs the code directly; we wait with a wall-clock
+    timeout and always force-remove the container afterwards.
 """
 from dataclasses import dataclass, field
 import io
@@ -22,12 +27,12 @@ import json
 import logging
 import os
 import tarfile
-import threading
 import time
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 import docker
+import requests
 
 from config import (
     SANDBOX_MEM_LIMIT,
@@ -40,20 +45,10 @@ from config import (
 logger = logging.getLogger(__name__)
 client = docker.from_env()
 
-# Writable areas inside the otherwise read-only container. Both are RAM-backed
-# tmpfs with hard size caps, so a runaway submission cannot exhaust host disk.
-WORKSPACE = "/workspace"
-TMPFS = {
-    "/workspace": "rw,size=64m,mode=1777",
-    "/tmp": "rw,size=16m,mode=1777",
-}
+# The only writable area at runtime. RAM-backed, hard size cap.
+TMPFS = {"/tmp": "rw,size=16m,mode=1777"}
 
 
-# WORKSPACE = "/workspace"
-# TMPFS = {
-#     "/workspace": "rw,size=64m,mode=1777",
-#     "/tmp": "rw,size=16m,mode=1777",
-# }
 @dataclass
 class RunResult:
     exit_code: int
@@ -66,12 +61,10 @@ class RunResult:
     container_attrs: Dict[str, Any] = field(default_factory=dict)
 
 
-
 def _load_security_opt() -> List[str]:
-    """Build the security_opt list, embedding the seccomp profile as inline JSON.
+    """security_opt with the seccomp profile embedded as inline JSON.
 
-    The Docker daemon cannot read a client-side file path, so docker-py must
-    send the profile *content*, not a path.
+    The daemon cannot read a client-side path, so docker-py must send content.
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     seccomp_path = os.path.join(current_dir, "images", "seccomp.json")
@@ -81,7 +74,7 @@ def _load_security_opt() -> List[str]:
     try:
         with open(seccomp_path, "r", encoding="utf-8") as f:
             seccomp_data = json.load(f)
-        seccomp_data.pop("_comment", None)  # comments are not valid in a real profile
+        seccomp_data.pop("_comment", None)
         return ["no-new-privileges", f"seccomp={json.dumps(seccomp_data)}"]
     except Exception as e:
         logger.warning("Failed to load seccomp profile: %s; running without seccomp.", e)
@@ -128,31 +121,34 @@ def run(code: str, language: str = "python", image: Optional[str] = None) -> Run
     container = None
     timed_out = False
     oom_killed = False
+    pids_limit_hit = False
     exit_code = -1
+    stdout = ""
+    stderr = ""
     fs_diff: List[Dict[str, Any]] = []
     container_attrs: Dict[str, Any] = {}
-    out_buf: Dict[str, bytes] = {"stdout": b"", "stderr": b""}
 
     lang = language.lower()
     if not image:
         image = "node:20-slim" if lang == "node" else "python:3.11-slim"
     file_name = "solution.js" if lang == "node" else "solution.py"
     run_cmd = (
-        ["node", f"{WORKSPACE}/solution.js"] if lang == "node"
-        else ["python", f"{WORKSPACE}/solution.py"]
+        ["node", f"/workspace/{file_name}"] if lang == "node"
+        else ["python", f"/workspace/{file_name}"]
     )
 
     start_time = time.perf_counter()
     try:
-        # 1. Create a container that just blocks; the real command runs via exec.
+        # 1. Create the container with the REAL command. working_dir is the
+        #    writable /tmp tmpfs so relative writes by the submission land there.
         container = client.containers.create(
             image,
-            command=["sleep", str(SANDBOX_TIMEOUT_SECONDS + 10)],
-            working_dir=WORKSPACE,
+            command=run_cmd,
+            working_dir="/tmp",
             detach=True,
             network_mode="none",
             read_only=True,
-            mounts=[docker.types.Mount(target=WORKSPACE, source="", type="volume")],
+            mounts=[docker.types.Mount(target="/workspace", source="", type="volume")],
             tmpfs=TMPFS,
             user="65534:65534",  # nobody
             cap_drop=["ALL"],
@@ -163,10 +159,9 @@ def run(code: str, language: str = "python", image: Optional[str] = None) -> Run
             labels={"sandbench": "1"},
         )
 
-        # 2. Start so the tmpfs mounts attach.
-        container.start()
-
-        # 3. Inject the payload INTO the mounted tmpfs (now visible at runtime).
+        # 2. Copy the payload in BEFORE start (read-only is enforced only at
+        #    start). Since /workspace is a volume, we can put_archive into it
+        #    even when the container is stopped.
         tar_stream = io.BytesIO()
         with tarfile.open(fileobj=tar_stream, mode="w") as tar:
             code_bytes = code.encode("utf-8")
@@ -175,68 +170,53 @@ def run(code: str, language: str = "python", image: Optional[str] = None) -> Run
             info.mode = 0o755
             tar.addfile(info, io.BytesIO(code_bytes))
         tar_stream.seek(0)
-        container.put_archive(WORKSPACE, tar_stream.getvalue())
+        container.put_archive("/workspace", tar_stream.getvalue())
 
-        # 4. Exec the real command, streaming demuxed output, with a watchdog timeout.
-        exec_id = client.api.exec_create(
-            container.id, cmd=run_cmd, user="65534:65534",
-            workdir=WORKSPACE, stdout=True, stderr=True,
-        )["Id"]
+        # 3. Start (read-only root + tmpfs now enforced) and run the code.
+        container.start()
 
-        def _pump():
-            try:
-                for stdout_chunk, stderr_chunk in client.api.exec_start(
-                    exec_id, demux=True, stream=True
-                ):
-                    if stdout_chunk:
-                        out_buf["stdout"] += stdout_chunk
-                    if stderr_chunk:
-                        out_buf["stderr"] += stderr_chunk
-            except Exception as e:  # killed mid-stream on timeout, etc.
-                logger.debug("exec stream ended: %s", e)
-
-        worker = threading.Thread(target=_pump, daemon=True)
-        worker.start()
-        worker.join(timeout=SANDBOX_TIMEOUT_SECONDS)
-
-        if worker.is_alive():
+        # 4. Wait with a wall-clock timeout.
+        try:
+            res = container.wait(timeout=SANDBOX_TIMEOUT_SECONDS)
+            exit_code = res.get("StatusCode", -1)
+        except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError):
             timed_out = True
             # Sample PID usage before killing so silent fork bombs are detectable.
             try:
                 stats = container.stats(stream=False)
                 pids = stats.get("pids_stats", {})
                 if pids.get("current", 0) > 0 and pids.get("current") == pids.get("limit"):
-                    out_buf["stderr"] += (
-                        b"\nBlockingIOError: [Errno 11] Resource temporarily "
-                        b"unavailable (PID limit reached)"
-                    )
+                    pids_limit_hit = True
             except Exception:
                 pass
             try:
                 container.kill()
             except Exception:
                 pass
-            worker.join(timeout=3)
 
-        # 5. Resolve exit code and OOM state.
-        try:
-            info = client.api.exec_inspect(exec_id)
-            exit_code = info.get("ExitCode")
-            if exit_code is None:
-                exit_code = -1
-        except Exception:
-            exit_code = -1
-
+        # 5. Resolve state, exit code, OOM.
         try:
             container.reload()
             container_attrs = container.attrs
-            oom_killed = container_attrs.get("State", {}).get("OOMKilled", False)
+            state = container_attrs.get("State", {})
+            oom_killed = state.get("OOMKilled", False)
+            if not timed_out:
+                exit_code = state.get("ExitCode", exit_code)
         except Exception:
             pass
-        # exit 137 outside a timeout kill is a strong OOM/SIGKILL signal.
         if not timed_out and exit_code == 137:
             oom_killed = True
 
+        # 6. Capture output (each truncated to 64 KB).
+        try:
+            stdout = container.logs(stdout=True, stderr=False).decode("utf-8", errors="replace")[:65536]
+            stderr = container.logs(stdout=False, stderr=True).decode("utf-8", errors="replace")[:65536]
+        except Exception as e:
+            logger.warning("Failed to read container logs: %s", e)
+        if pids_limit_hit:
+            stderr += "\nBlockingIOError: [Errno 11] Resource temporarily unavailable (PID limit reached)"
+
+        # 7. Filesystem diff (best-effort; read-only root makes this sparse).
         try:
             raw_diff = container.diff() or []
             fs_diff = [{"Path": d.get("Path", ""), "Kind": d.get("Kind", -1)} for d in raw_diff]
@@ -244,7 +224,7 @@ def run(code: str, language: str = "python", image: Optional[str] = None) -> Run
             logger.warning("Failed to collect fs diff: %s", e)
 
     finally:
-        # 6. Teardown — v=True frees any associated anonymous volumes too.
+        # 8. Teardown — v=True frees any associated anonymous volumes too.
         if container is not None:
             try:
                 container.remove(force=True, v=True)
@@ -254,8 +234,8 @@ def run(code: str, language: str = "python", image: Optional[str] = None) -> Run
     duration_ms = int((time.perf_counter() - start_time) * 1000)
     return RunResult(
         exit_code=exit_code,
-        stdout=out_buf["stdout"].decode("utf-8", errors="replace")[:65536],
-        stderr=out_buf["stderr"].decode("utf-8", errors="replace")[:65536],
+        stdout=stdout,
+        stderr=stderr,
         duration_ms=duration_ms,
         oom_killed=oom_killed,
         timed_out=timed_out,
