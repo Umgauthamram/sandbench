@@ -4,7 +4,20 @@
 // The Python worker connects to the SAME database over the standard rediss://
 // protocol and BRPOPs the job queue (see SandBench_Starter_README.md).
 
-const URL = process.env.UPSTASH_REDIS_REST_URL;
+let rawUrl = process.env.UPSTASH_REDIS_REST_URL;
+if (rawUrl && (rawUrl.startsWith("redis://") || rawUrl.startsWith("rediss://"))) {
+  try {
+    const withoutProtocol = rawUrl.replace(/^rediss?:\/\//, "");
+    const parts = withoutProtocol.split("@");
+    const hostPort = parts[parts.length - 1];
+    const host = hostPort.split(":")[0];
+    rawUrl = `https://${host}`;
+  } catch (e) {
+    console.error("Failed to parse redis URL into REST URL:", e);
+  }
+}
+
+const URL = rawUrl;
 const TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 export const redisConfigured = Boolean(URL && TOKEN);
