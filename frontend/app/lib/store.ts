@@ -34,6 +34,8 @@ export interface SubmitInput {
   type: SubmissionType;
   taskId: string;
   payload?: string; // code text, endpoint URL, etc.
+  archiveB64?: string;
+  archiveKind?: string; // "zip" | "targz"
 }
 
 function newId(): string {

@@ -1,7 +1,7 @@
 // Shared domain types — mirror the §4 data model in the build guide.
 // The frontend speaks these shapes; the FastAPI gateway will return them.
 
-export type SubmissionType = "code" | "files" | "api" | "model";
+export type SubmissionType = "code" | "files" /* | "api" | "model" */;
 
 export type Language = "python" | "node";
 

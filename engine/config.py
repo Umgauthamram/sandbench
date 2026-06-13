@@ -24,3 +24,10 @@ LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "gemini")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL_ENDPOINT_URL = os.environ.get("MODEL_ENDPOINT_URL", "")
 TRACE_LOG_PATH = os.environ.get("TRACE_LOG_PATH", "traces.jsonl")
+
+# Archive Validation Limits
+MAX_UNCOMPRESSED = int(os.environ.get("MAX_UNCOMPRESSED", 5 * 1024 * 1024))
+MAX_FILES = int(os.environ.get("MAX_FILES", 200))
+MAX_FILE_SIZE = int(os.environ.get("MAX_FILE_SIZE", 1 * 1024 * 1024))
+MAX_DEPTH = int(os.environ.get("MAX_DEPTH", 12))
+RATIO_LIMIT = float(os.environ.get("RATIO_LIMIT", 100.0))

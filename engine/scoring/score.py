@@ -6,7 +6,7 @@ a hardened sandbox container and computes a [0.0, 1.0] fraction score.
 import logging
 import os
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from scoring.registry import Task
 from sandbox import runner
@@ -56,12 +56,17 @@ def _parse_pytest_fraction(output: str) -> Dict[str, Any]:
     return {"score": score, "passed": passed, "total": total}
 
 
-def score_submission(code: str, task: Task) -> Dict[str, Any]:
+def score_submission(
+    code: str,
+    task: Task,
+    project_files: Optional[Dict[str, str]] = None
+) -> Dict[str, Any]:
     """Run the task's hidden test suite against the submission and score it.
 
     Args:
         code: The user-submitted source code.
         task: The Task definition (includes test_command, tests_dir, etc.).
+        project_files: Optional dictionary mapping container absolute paths to their file content string.
 
     Returns:
         Dictionary with keys: score (float 0-1), passed (int), total (int),
@@ -96,6 +101,30 @@ def score_submission(code: str, task: Task) -> Dict[str, Any]:
                 "total": 0,
                 "raw_output": f"Tests directory not found: {tests_dir}",
             }
+
+        # Merge user files into extra_files, protecting against test override
+        if project_files:
+            entrypoint_path = f"/workspace/{task.entrypoint}"
+            if entrypoint_path in project_files:
+                code = project_files[entrypoint_path]
+
+            ignored_configs = {"conftest.py", "pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml"}
+
+            for k, v in project_files.items():
+                normalized_k = k.replace("\\", "/").strip("/")
+                parts = normalized_k.split("/")
+                # Prevent cheat: if the path resides in tests/ (e.g. workspace/tests/...)
+                if len(parts) > 1 and parts[0] == "workspace" and parts[1] == "tests":
+                    logger.warning("User-submitted file attempts to override tests directory: %s", k)
+                    continue
+                
+                # Conftest / Pytest-config cheat guard
+                basename = parts[-1] if parts else ""
+                if basename in ignored_configs:
+                    logger.warning("[scoring] ignored uploaded config file: %s", basename)
+                    continue
+                
+                extra_files[k] = v
 
         if not extra_files:
             logger.warning("No test files found for task %s", task.id)
@@ -144,3 +173,4 @@ def score_submission(code: str, task: Task) -> Dict[str, Any]:
             "total": 0,
             "raw_output": f"Scoring error: {type(exc).__name__}",
         }
+

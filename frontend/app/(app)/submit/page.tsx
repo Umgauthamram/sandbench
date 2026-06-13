@@ -5,13 +5,13 @@ import { useState, useEffect } from "react";
 import { PageHeader } from "../../components/ui";
 import { TASKS } from "../../lib/mock";
 import type { SubmissionType } from "../../lib/types";
-import { UploadCloud, Code, Globe, Brain, Cpu } from "lucide-react";
+import { UploadCloud, Code, /* Globe, Brain, */ Cpu } from "lucide-react";
 
 const TYPES: { id: SubmissionType; label: string; hint: string; icon: typeof Code }[] = [
   { id: "code",  label: "Code",          hint: "Paste a single source file", icon: Code },
   { id: "files", label: "Files / repo",  hint: "Upload an archive",          icon: UploadCloud },
-  { id: "api",   label: "API endpoint",  hint: "We probe a URL you provide", icon: Globe },
-  { id: "model", label: "Model",         hint: "Bring your own API key",     icon: Brain },
+  // { id: "api",   label: "API endpoint",  hint: "We probe a URL you provide", icon: Globe },
+  // { id: "model", label: "Model",         hint: "Bring your own API key",     icon: Brain },
 ];
 
 const SAMPLE = `def fizzbuzz(n):
@@ -34,10 +34,14 @@ export default function SubmitPage() {
   const [tasks, setTasks] = useState(TASKS);
   const [taskId, setTaskId] = useState(TASKS[0]?.id ?? "");
   const [code, setCode] = useState(SAMPLE);
-  const [endpoint, setEndpoint] = useState("");
-  const [apiKey, setApiKey] = useState("");
+  // const [endpoint, setEndpoint] = useState("");
+  // const [apiKey, setApiKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [fileName, setFileName] = useState<string>("");
+  const [fileBase64, setFileBase64] = useState<string>("");
+  const [archiveKind, setArchiveKind] = useState<"zip" | "targz" | "">("");
 
   useEffect(() => {
     fetch("/api/tasks")
@@ -51,19 +55,61 @@ export default function SubmitPage() {
       .catch((err) => console.error("Failed to load tasks:", err));
   }, []);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("File size exceeds 5 MB limit");
+      return;
+    }
+
+    const name = file.name.toLowerCase();
+    let kind: "zip" | "targz" | null = null;
+    if (name.endsWith(".zip")) {
+      kind = "zip";
+    } else if (name.endsWith(".tar.gz") || name.endsWith(".tgz") || name.endsWith(".gz")) {
+      kind = "targz";
+    } else {
+      setError("Unsupported file format. Please upload a .zip or .tar.gz / .tgz archive.");
+      return;
+    }
+
+    setFileName(file.name);
+    setArchiveKind(kind);
+    setError(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result;
+      if (typeof result === "string") {
+        const base64 = result.split(",")[1];
+        setFileBase64(base64);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
 
-    const payload =
-      type === "code" ? code : type === "files" ? "" : endpoint;
+    if (type === "files" && (!fileBase64 || !archiveKind)) {
+      setError("Please select a valid project archive file to upload");
+      setSubmitting(false);
+      return;
+    }
+
+    const bodyPayload = type === "files"
+      ? { type, taskId, archiveB64: fileBase64, archiveKind }
+      : { type, taskId, payload: code };
 
     try {
       const res = await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, taskId, payload }),
+        body: JSON.stringify(bodyPayload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Submission failed");
@@ -149,19 +195,43 @@ export default function SubmitPage() {
           )}
 
           {type === "files" && (
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50 p-14 text-center text-sm text-zinc-500 transition-colors hover:border-zinc-600 hover:bg-zinc-900">
-              <UploadCloud className="h-10 w-10 text-zinc-600 mb-3" />
-              <span>
-                Drop a <code className="text-zinc-300">.zip</code> /{" "}
-                <code className="text-zinc-300">.tar.gz</code> or click to browse
-              </span>
-              <span className="mt-1.5 text-xs text-zinc-700">
-                Size-limited and validated server-side.
-              </span>
-              <input type="file" className="hidden" accept=".zip,.tar,.gz,.tgz" />
-            </label>
+            fileName ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50 p-10 text-center text-sm text-zinc-300">
+                <UploadCloud className="h-10 w-10 text-blue-400 mb-3 animate-pulse" />
+                <span className="font-medium text-zinc-100">{fileName}</span>
+                <span className="mt-1 text-xs text-zinc-500">Ready to upload</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFileName("");
+                    setFileBase64("");
+                  }}
+                  className="mt-4 rounded-lg bg-zinc-800 hover:bg-zinc-700 px-3.5 py-1.5 text-xs font-semibold text-zinc-200 transition-colors"
+                >
+                  Change file
+                </button>
+              </div>
+            ) : (
+              <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/50 p-14 text-center text-sm text-zinc-500 transition-colors hover:border-zinc-600 hover:bg-zinc-900">
+                <UploadCloud className="h-10 w-10 text-zinc-600 mb-3" />
+                <span>
+                  Drop a <code className="text-zinc-300">.zip</code> /{" "}
+                  <code className="text-zinc-300">.tar.gz</code> or click to browse
+                </span>
+                <span className="mt-1.5 text-xs text-zinc-700">
+                  Size-limited and validated server-side.
+                </span>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".zip,.tar,.gz,.tgz"
+                  onChange={handleFileChange}
+                />
+              </label>
+            )
           )}
 
+          {/*
           {type === "api" && (
             <input
               type="url"
@@ -193,6 +263,7 @@ export default function SubmitPage() {
               </p>
             </div>
           )}
+          */}
         </section>
 
         <div className="flex items-center gap-4 border-t border-zinc-800 pt-6">

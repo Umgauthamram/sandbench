@@ -149,7 +149,7 @@ export const RUNS: Run[] = [
   {
     id: "run_d44f",
     submissionId: "sub_d44f",
-    type: "model",
+    type: "code" /* "model" */,
     language: "python",
     taskId: "rate-limiter",
     taskTitle: "Token-bucket rate limiter",

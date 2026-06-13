@@ -14,6 +14,7 @@ import docker
 
 from config import UPSTASH_REDIS_URL, LLM_PROVIDER
 from sandbox import runner, static_gate, monitor, review
+from sandbox.archive import extract_archive
 from sandbox.rules import Severity, Flag
 from analysis import trace_log, patch_apply
 from scoring import registry as task_registry
@@ -56,10 +57,202 @@ def handle(job: dict) -> None:
         run_data["logs"].append("[worker] starting analysis pipeline...")
         r.set(run_key, json.dumps(run_data))
 
+    user_files = None
+    if job.get("type") == "files":
+        archive_b64 = job.get("archiveB64") or ""
+        archive_kind = job.get("archiveKind") or ""
+        
+        from config import MAX_UNCOMPRESSED
+        max_b64_len = int((MAX_UNCOMPRESSED * 2) * 4 / 3) + 4
+        
+        if not archive_b64 or not archive_kind:
+            reason = "missing archive payload or kind"
+        elif len(archive_b64) > max_b64_len:
+            reason = "archive size exceeds maximum uncompressed limit before decoding"
+        else:
+            reason = None
+            
+        if reason:
+            logger.warning("Archive rejected for run %s: %s", run_id, reason)
+            result = {
+                "run_id": run_id,
+                "status": "quarantined",
+                "verdict": "malicious",
+                "score": 0.0,
+                "flags": [
+                    {
+                        "rule_id": "ARCHIVE_REJECTED",
+                        "source": "worker",
+                        "location": "archive",
+                        "severity": "high",
+                        "detail": f"[archive] rejected: {reason}"
+                    }
+                ],
+                "stdout": "",
+                "stderr": f"[archive] rejected: {reason}",
+                "duration_ms": 0,
+                "exit_code": 0,
+                "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
+            }
+            if run_data:
+                run_data["status"] = "quarantined"
+                run_data["verdict"] = "malicious"
+                run_data["score"] = 0.0
+                run_data["finishedAt"] = result["finished_at"]
+                run_data["flags"] = [
+                    {
+                        "id": "ARCHIVE_REJECTED",
+                        "source": "worker",
+                        "rule": "ARCHIVE_REJECTED",
+                        "severity": "high",
+                        "detail": f"[archive] rejected: {reason}"
+                    }
+                ]
+                run_data["logs"].append(f"[archive] rejected: {reason}")
+                r.set(run_key, json.dumps(run_data))
+            r.set(f"sandbench:run:{run_id}", json.dumps(result))
+            return
+
+        import base64
+        try:
+            raw_bytes = base64.b64decode(archive_b64)
+        except Exception as exc:
+            reason = f"failed to decode base64: {str(exc)}"
+            result = {
+                "run_id": run_id,
+                "status": "quarantined",
+                "verdict": "malicious",
+                "score": 0.0,
+                "flags": [
+                    {
+                        "rule_id": "ARCHIVE_REJECTED",
+                        "source": "worker",
+                        "location": "archive",
+                        "severity": "high",
+                        "detail": f"[archive] rejected: {reason}"
+                    }
+                ],
+                "stdout": "",
+                "stderr": f"[archive] rejected: {reason}",
+                "duration_ms": 0,
+                "exit_code": 0,
+                "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
+            }
+            if run_data:
+                run_data["status"] = "quarantined"
+                run_data["verdict"] = "malicious"
+                run_data["score"] = 0.0
+                run_data["finishedAt"] = result["finished_at"]
+                run_data["flags"] = [
+                    {
+                        "id": "ARCHIVE_REJECTED",
+                        "source": "worker",
+                        "rule": "ARCHIVE_REJECTED",
+                        "severity": "high",
+                        "detail": f"[archive] rejected: {reason}"
+                    }
+                ]
+                run_data["logs"].append(f"[archive] rejected: {reason}")
+                r.set(run_key, json.dumps(run_data))
+            r.set(f"sandbench:run:{run_id}", json.dumps(result))
+            return
+
+        user_files, extract_reason = extract_archive(raw_bytes, archive_kind)
+        
+        if user_files is None:
+            logger.warning("Archive validation failed for run %s: %s", run_id, extract_reason)
+            result = {
+                "run_id": run_id,
+                "status": "quarantined",
+                "verdict": "malicious",
+                "score": 0.0,
+                "flags": [
+                    {
+                        "rule_id": "ARCHIVE_REJECTED",
+                        "source": "worker",
+                        "location": "archive",
+                        "severity": "high",
+                        "detail": f"[archive] rejected: {extract_reason}"
+                    }
+                ],
+                "stdout": "",
+                "stderr": f"[archive] rejected: {extract_reason}",
+                "duration_ms": 0,
+                "exit_code": 0,
+                "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
+            }
+            if run_data:
+                run_data["status"] = "quarantined"
+                run_data["verdict"] = "malicious"
+                run_data["score"] = 0.0
+                run_data["finishedAt"] = result["finished_at"]
+                run_data["flags"] = [
+                    {
+                        "id": "ARCHIVE_REJECTED",
+                        "source": "worker",
+                        "rule": "ARCHIVE_REJECTED",
+                        "severity": "high",
+                        "detail": f"[archive] rejected: {extract_reason}"
+                    }
+                ]
+                run_data["logs"].append(f"[archive] rejected: {extract_reason}")
+                r.set(run_key, json.dumps(run_data))
+            r.set(f"sandbench:run:{run_id}", json.dumps(result))
+            return
+
+        task_id = job.get("taskId") or ""
+        task = task_registry.get_task(task_id)
+        entrypoint_filename = task.entrypoint if task else ("solution.js" if language == "node" else "solution.py")
+        entrypoint_key = f"/workspace/{entrypoint_filename}"
+        
+        if entrypoint_key not in user_files:
+            logger.warning("Entrypoint %s not found in user files", entrypoint_key)
+            result = {
+                "run_id": run_id,
+                "status": "done",
+                "verdict": "broken",
+                "score": 0.0,
+                "flags": [],
+                "stdout": "",
+                "stderr": f"[archive] entrypoint {entrypoint_filename} not found",
+                "duration_ms": 0,
+                "exit_code": -1,
+                "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
+            }
+            if run_data:
+                run_data["status"] = "done"
+                run_data["verdict"] = "broken"
+                run_data["score"] = 0.0
+                run_data["finishedAt"] = result["finished_at"]
+                run_data["logs"].append(f"[archive] entrypoint {entrypoint_filename} not found")
+                r.set(run_key, json.dumps(run_data))
+            r.set(f"sandbench:run:{run_id}", json.dumps(result))
+            return
+
+        code = user_files[entrypoint_key]
+        if run_data:
+            run_data["logs"].append(f"[worker] archive validated successfully ({len(user_files)} extra files found)")
+            r.set(run_key, json.dumps(run_data))
+
     try:
-        # A) Static analysis gate (run before container creation)
+        flags = []
         with tempfile.TemporaryDirectory() as tmpdir:
-            flags = static_gate.scan(code, language, tmpdir)
+            if user_files:
+                for file_path, file_content in user_files.items():
+                    try:
+                        file_flags = static_gate.scan(file_content, language, tmpdir)
+                        rel_path = file_path.replace("/workspace/", "")
+                        for flag in file_flags:
+                            if flag.location and ":" in flag.location:
+                                loc_parts = flag.location.split(":", 1)
+                                flag.location = f"{rel_path}:{loc_parts[1]}"
+                            else:
+                                flag.location = rel_path
+                        flags.extend(file_flags)
+                    except Exception as scan_err:
+                        logger.warning("Failed to scan file %s in static gate: %s", file_path, scan_err)
+            else:
+                flags = static_gate.scan(code, language, tmpdir)
 
         is_quarantined = any(f.severity == Severity.HIGH for f in flags)
 
@@ -104,7 +297,7 @@ def handle(job: dict) -> None:
                 run_data["logs"].append("[worker] spawning hardened container...")
                 r.set(run_key, json.dumps(run_data))
 
-            run_res = runner.run(code, language)
+            run_res = runner.run(code, language, extra_files=user_files)
 
             # C) Monitor analysis of execution results
             monitor_flags = monitor.collect(
@@ -134,7 +327,7 @@ def handle(job: dict) -> None:
                             run_data["logs"].append("[scoring] running hidden test suite...")
                             r.set(run_key, json.dumps(run_data))
 
-                        score_res = scorer.score_submission(code, task)
+                        score_res = scorer.score_submission(code, task, project_files=user_files)
                         score = score_res["score"]
                         passed = score_res.get("passed", 0)
                         total = score_res.get("total", 0)
@@ -220,7 +413,7 @@ def handle(job: dict) -> None:
                                         run_data["logs"].append(f"[repair] patch applied ({method_str})")
                                         r.set(run_key, json.dumps(run_data))
                                     
-                                    score_after_res = scorer.score_submission(patched_code, task)
+                                    score_after_res = scorer.score_submission(patched_code, task, project_files=user_files)
                                     score_after_val = score_after_res["score"]
                                     passed_after = score_after_res.get("passed", 0)
                                     total_after = score_after_res.get("total", 0)
@@ -353,7 +546,7 @@ def handle(job: dict) -> None:
                 existing_idx = -1
                 for idx, e in enumerate(lb):
                     e_uid = e.get("userId")
-                    entry_uid = entry.get("userId")
+                    entry_uid = entry.get("userId") 
                     if e_uid and entry_uid:
                         user_match = e_uid == entry_uid
                     else:
