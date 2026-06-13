@@ -197,6 +197,9 @@ export default function SubmitPage() {
               if (task) {
                 setCode(getBrokenCode(task));
               }
+              setFileName("");
+              setFileBase64("");
+              setArchiveKind("");
             }}
             className="w-full max-w-md rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
           >

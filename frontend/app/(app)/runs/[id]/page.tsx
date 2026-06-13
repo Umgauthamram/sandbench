@@ -39,7 +39,7 @@ function getVerdictCopy(
   flags: { severity: string }[],
   score: number | null | undefined
 ): { title: string; tone: string; border: string; body: string } {
-  const base = VERDICT_BASE[verdict];
+  let base = VERDICT_BASE[verdict];
 
   let body: string;
   if (verdict === "malicious") {
@@ -56,8 +56,32 @@ function getVerdictCopy(
     // clean
     if (typeof score === "number" && score === 0) {
       body = "No security flags fired. Code executed cleanly but failed all hidden tests — check your logic.";
+      base = {
+        title: "Clean (Failing Tests)",
+        tone: "text-amber-400",
+        border: "border-amber-500/20 ring-amber-500/10",
+      };
+    } else if (typeof score === "number" && score < 1.0) {
+      body = "No security flags fired. Code executed cleanly but failed some hidden tests — check your logic.";
+      base = {
+        title: "Clean (Failing Tests)",
+        tone: "text-amber-400",
+        border: "border-amber-500/20 ring-amber-500/10",
+      };
+    } else if (typeof score === "number" && score === 1.0) {
+      body = "No security flags fired. Code executed cleanly and passed all tests.";
+      base = {
+        title: "Clean & Passed",
+        tone: "text-emerald-400",
+        border: "border-emerald-500/20 ring-emerald-500/10",
+      };
     } else {
       body = "No security flags fired. Tests and analysis below.";
+      base = {
+        title: "Clean (No score)",
+        tone: "text-zinc-400",
+        border: "border-zinc-500/20 ring-zinc-500/10",
+      };
     }
   }
 
