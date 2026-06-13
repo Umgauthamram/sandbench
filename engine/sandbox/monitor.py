@@ -36,6 +36,11 @@ FORK_BOMB_PATTERNS = [
     "cannot allocate memory"
 ]
 
+DISK_EXHAUSTION_PATTERNS = [
+    "No space left on device",
+    "ENOSPC"
+]
+
 
 def collect(
     container_attrs: Dict[str, Any],
@@ -106,6 +111,13 @@ def collect(
         if any(pattern in line for pattern in FORK_BOMB_PATTERNS):
             flags.append(make_flag("FORK_BOMB", line.strip()))
             break  # One flag is sufficient
+
+    # Disk space exhaustion check in stdout/stderr
+    combined = (stdout or "") + "\n" + (stderr or "")
+    for line in combined.splitlines():
+        if any(pattern in line for pattern in DISK_EXHAUSTION_PATTERNS):
+            flags.append(make_flag("DISK_EXHAUSTION", line.strip()))
+            break
 
     # 4. TIMEOUT SIGNALS
     if timed_out:

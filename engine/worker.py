@@ -348,7 +348,31 @@ def handle(job: dict) -> None:
         entrypoint_key = f"/workspace/{entrypoint_filename}"
         
         if entrypoint_key not in user_files:
-            logger.warning("Entrypoint %s not found in user files", entrypoint_key)
+            # Try to resolve a candidate from the uploaded files to act as the entrypoint
+            ext = ".js" if language == "node" else ".py"
+            candidates = [k for k in user_files.keys() if k.endswith(ext)]
+            if candidates:
+                root_candidates = [c for c in candidates if c.count("/") == 2]
+                selected_candidate = None
+                if root_candidates:
+                    main_names = {"/workspace/main.py", "/workspace/index.js", f"/workspace/{task_id}{ext}"}
+                    for name in main_names:
+                        if name in root_candidates:
+                            selected_candidate = name
+                            break
+                    if not selected_candidate:
+                        selected_candidate = root_candidates[0]
+                else:
+                    selected_candidate = candidates[0]
+                
+                if selected_candidate:
+                    logger.info("Aliasing entrypoint from %s to %s", selected_candidate, entrypoint_key)
+                    user_files[entrypoint_key] = user_files[selected_candidate]
+        
+        if entrypoint_key not in user_files:
+            available_files = [k.replace("/workspace/", "") for k in user_files.keys()]
+            error_msg = f"[archive] entrypoint {entrypoint_filename} not found. Found files: {', '.join(available_files) if available_files else 'none'}"
+            logger.warning("Entrypoint %s not found in user files. Available: %s", entrypoint_key, available_files)
             result = {
                 "run_id": run_id,
                 "status": "done",
@@ -356,7 +380,7 @@ def handle(job: dict) -> None:
                 "score": 0.0,
                 "flags": [],
                 "stdout": "",
-                "stderr": f"[archive] entrypoint {entrypoint_filename} not found",
+                "stderr": error_msg,
                 "duration_ms": 0,
                 "exit_code": -1,
                 "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
@@ -366,7 +390,7 @@ def handle(job: dict) -> None:
                 run_data["verdict"] = "broken"
                 run_data["score"] = 0.0
                 run_data["finishedAt"] = result["finished_at"]
-                run_data["logs"].append(f"[archive] entrypoint {entrypoint_filename} not found")
+                run_data["logs"].append(error_msg)
                 r.set(run_key, json.dumps(run_data))
             r.set(f"sandbench:run:{run_id}", json.dumps(result))
             return
@@ -481,6 +505,17 @@ def handle(job: dict) -> None:
                             run_data["logs"].append(
                                 f"[scoring] {passed}/{total} tests passed (score {score:.2f})"
                             )
+
+                        # Check for security flags from the scoring container
+                        scoring_flags = score_res.get("flags", [])
+                        if scoring_flags:
+                            flags.extend(scoring_flags)
+                            if any(f.severity == Severity.HIGH for f in scoring_flags):
+                                verdict = "malicious"
+                                status = "quarantined"
+                                score = 0.0
+                                if run_data:
+                                    run_data["logs"].append("[worker] quarantined by dynamic analysis during scoring")
                     except Exception as score_err:
                         logger.exception("Scoring failed for run %s: %s", run_id, score_err)
                         score = 0.0
@@ -746,6 +781,21 @@ def main() -> None:
     # Run orphan cleanup on startup
     runner.cleanup_orphans(client)
     
+    # Pre-pull required sandbox images
+    for img in ["python:3.11-slim", "node:20-slim"]:
+        try:
+            logger.info("Checking sandbox image: %s", img)
+            client.images.get(img)
+        except docker.errors.ImageNotFound:
+            logger.info("Sandbox image %s not found locally. Pulling...", img)
+            try:
+                client.images.pull(img)
+                logger.info("Successfully pulled sandbox image: %s", img)
+            except Exception as pull_err:
+                logger.warning("Failed to pull sandbox image %s: %s", img, pull_err)
+        except Exception as e:
+            logger.warning("Failed to verify sandbox image %s: %s", img, e)
+
     # Publish real task registry to Redis on startup
     try:
         tasks_map = task_registry.load_tasks()

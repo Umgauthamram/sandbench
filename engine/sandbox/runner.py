@@ -156,25 +156,44 @@ def run(
 
     start_time = time.perf_counter()
     try:
-        # 1. Create the container with the REAL command. working_dir is the
-        #    writable /tmp tmpfs so relative writes by the submission land there.
-        container = client.containers.create(
-            image,
-            command=run_cmd,
-            working_dir="/tmp",
-            detach=True,
-            network_mode="none",
-            read_only=True,
-            mounts=[docker.types.Mount(target="/workspace", source="", type="volume")],
-            tmpfs=TMPFS,
-            user="65534:65534",  # nobody
-            cap_drop=["ALL"],
-            security_opt=_load_security_opt(),
-            mem_limit=SANDBOX_MEM_LIMIT,
-            nano_cpus=int(SANDBOX_CPUS * 1e9),
-            pids_limit=SANDBOX_PIDS_LIMIT,
-            labels={"sandbench": "1"},
-        )
+        try:
+            container = client.containers.create(
+                image,
+                command=run_cmd,
+                working_dir="/tmp",
+                detach=True,
+                network_mode="none",
+                read_only=True,
+                mounts=[docker.types.Mount(target="/workspace", source="", type="volume")],
+                tmpfs=TMPFS,
+                user="65534:65534",  # nobody
+                cap_drop=["ALL"],
+                security_opt=_load_security_opt(),
+                mem_limit=SANDBOX_MEM_LIMIT,
+                nano_cpus=int(SANDBOX_CPUS * 1e9),
+                pids_limit=SANDBOX_PIDS_LIMIT,
+                labels={"sandbench": "1"},
+            )
+        except docker.errors.ImageNotFound:
+            logger.info("Image %s not found locally. Pulling image...", image)
+            client.images.pull(image)
+            container = client.containers.create(
+                image,
+                command=run_cmd,
+                working_dir="/tmp",
+                detach=True,
+                network_mode="none",
+                read_only=True,
+                mounts=[docker.types.Mount(target="/workspace", source="", type="volume")],
+                tmpfs=TMPFS,
+                user="65534:65534",  # nobody
+                cap_drop=["ALL"],
+                security_opt=_load_security_opt(),
+                mem_limit=SANDBOX_MEM_LIMIT,
+                nano_cpus=int(SANDBOX_CPUS * 1e9),
+                pids_limit=SANDBOX_PIDS_LIMIT,
+                labels={"sandbench": "1"},
+            )
 
         # 2. Copy the payload in BEFORE start (read-only is enforced only at
         #    start). Since /workspace is a volume, we can put_archive into it

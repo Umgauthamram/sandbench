@@ -56,7 +56,7 @@ def extract_archive(raw_bytes: bytes, kind: str) -> Tuple[Optional[Dict[str, str
         if kind not in ("zip", "targz"):
             return None, "invalid archive kind"
 
-        file_map: Dict[str, str] = {}
+        raw_file_map: Dict[str, str] = {}
         total_size = 0
         file_count = 0
         allowed_exts = {".py", ".js", ".json", ".txt", ".md", ".yaml", ".yml", ".ini", ".cfg", ".toml"}
@@ -139,7 +139,7 @@ def extract_archive(raw_bytes: bytes, kind: str) -> Tuple[Optional[Dict[str, str
                                 return None, "invalid non-UTF8 file detected"
                             
                             normalized_name = info.filename.replace("\\", "/")
-                            file_map[f"/workspace/{normalized_name}"] = content_str
+                            raw_file_map[normalized_name] = content_str
 
             except zipfile.BadZipFile as e:
                 return None, f"corrupt or invalid zip: {str(e)}"
@@ -217,10 +217,34 @@ def extract_archive(raw_bytes: bytes, kind: str) -> Tuple[Optional[Dict[str, str
                             return None, "invalid non-UTF8 file detected"
 
                         normalized_name = member.name.replace("\\", "/")
-                        file_map[f"/workspace/{normalized_name}"] = content_str
+                        raw_file_map[normalized_name] = content_str
 
             except Exception as e:
                 return None, f"corrupt or invalid tar.gz: {str(e)}"
+
+        # Strip any common root directory from paths (e.g. folder zipping wrappers)
+        common_root = ""
+        paths = list(raw_file_map.keys())
+        if paths:
+            split_paths = [p.split("/") for p in paths]
+            max_check_len = min(len(p) - 1 for p in split_paths)
+            if max_check_len > 0:
+                common_parts = []
+                for i in range(max_check_len):
+                    first = split_paths[0][i]
+                    if all(p[i] == first for p in split_paths):
+                        common_parts.append(first)
+                    else:
+                        break
+                if common_parts:
+                    common_root = "/".join(common_parts) + "/"
+
+        file_map = {}
+        for name, content in raw_file_map.items():
+            stripped_name = name
+            if common_root and name.startswith(common_root):
+                stripped_name = name[len(common_root):]
+            file_map[f"/workspace/{stripped_name}"] = content
 
         return file_map, "ok"
 

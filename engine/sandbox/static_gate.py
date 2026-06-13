@@ -7,7 +7,9 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
+import sys
 import tempfile
 from typing import List
 
@@ -16,6 +18,23 @@ import yara
 from sandbox.rules import Flag, make_flag
 
 logger = logging.getLogger(__name__)
+
+
+def _get_executable(name: str) -> str:
+    """Resolve executable from virtualenv's bin/Scripts directory if present, or fallback to PATH."""
+    prefix = sys.prefix
+    for sub in ("Scripts", "bin"):
+        path = os.path.join(prefix, sub, name)
+        path_exe = os.path.join(prefix, sub, f"{name}.exe")
+        if os.path.isfile(path_exe):
+            return path_exe
+        if os.path.isfile(path):
+            return path
+    
+    which_path = shutil.which(name)
+    if which_path:
+        return which_path
+    return name
 
 # Inline YARA rules definition as specified
 RULES_SOURCE = """
@@ -92,7 +111,7 @@ def scan(code: str, language: str, workdir: str) -> List[Flag]:
         # A) Bandit scan (Python only)
         if language.lower() == "python":
             try:
-                cmd = ["bandit", "-f", "json", "-q", temp_path]
+                cmd = [_get_executable("bandit"), "-f", "json", "-q", temp_path]
                 res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 # Bandit returns non-zero exit code if issues are found, which is expected.
                 if res.stdout:
@@ -117,7 +136,7 @@ def scan(code: str, language: str, workdir: str) -> List[Flag]:
 
         # B) Semgrep scan
         try:
-            cmd = ["semgrep", "--config", "p/security-audit", "--json", "--quiet", temp_path]
+            cmd = [_get_executable("semgrep"), "--config", "p/security-audit", "--json", "--quiet", temp_path]
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             if res.stdout:
                 data = json.loads(res.stdout)

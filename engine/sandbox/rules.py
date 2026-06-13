@@ -44,6 +44,7 @@ RULES: Dict[str, Tuple[str, Severity, str]] = {
     "SEMGREP_SECURITY":   ("static",  Severity.MEDIUM, "Semgrep security rule hit"),
     "OBFUSCATION":        ("static",  Severity.MEDIUM, "Obfuscated code (exec/eval on encoded data)"),
     "TIMEOUT":            ("monitor", Severity.LOW,    "Wall-clock timeout exceeded"),
+    "DISK_EXHAUSTION":    ("monitor", Severity.HIGH,   "Disk space exhausted (file system full error)"),
 }
 
 

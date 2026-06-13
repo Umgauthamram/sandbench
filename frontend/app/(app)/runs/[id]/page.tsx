@@ -218,8 +218,8 @@ export default async function RunDetailPage({
           </Card>
         )}
 
-        {/* Clean + nothing to suggest */}
-        {run.verdict === "clean" && run.suggestions.length === 0 && (
+        {/* Clean + nothing to suggest + no security flags */}
+        {run.verdict === "clean" && run.suggestions.length === 0 && run.flags.length === 0 && (
           <Card className="lg:col-span-2">
             <p className="flex items-center gap-2.5 text-sm text-zinc-400">
               <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />

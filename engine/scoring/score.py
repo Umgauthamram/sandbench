@@ -9,7 +9,7 @@ import re
 from typing import Any, Dict, Optional
 
 from scoring.registry import Task
-from sandbox import runner
+from sandbox import runner, monitor
 
 logger = logging.getLogger(__name__)
 
@@ -143,13 +143,16 @@ def score_submission(
         # Use our built golden python image so pytest is available inside the offline sandbox
         image = "sandbench/python:golden" if task.language.lower() == "python" else None
 
+        # Remove --tb=no to ensure traceback is printed for the security monitor
+        run_cmd = [arg for arg in task.test_command if not arg.startswith("--tb=")]
+
         # Run the test suite inside a fresh hardened sandbox
         run_res = runner.run(
             code,
             task.language,
             image=image,
             extra_files=extra_files,
-            command=task.test_command,
+            command=run_cmd,
         )
 
         # Combine stdout + stderr for parsing (pytest may write to either)
@@ -158,6 +161,15 @@ def score_submission(
 
         result = _parse_pytest_fraction(raw_output)
         result["raw_output"] = truncated
+
+        # Collect runtime security flags from the scoring container
+        result["flags"] = monitor.collect(
+            run_res.container_attrs,
+            run_res.fs_diff,
+            run_res.stdout,
+            run_res.stderr,
+            run_res.timed_out
+        )
 
         logger.info(
             "Scoring result for task %s: %d/%d passed, score=%.2f",

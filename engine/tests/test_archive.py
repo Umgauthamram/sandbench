@@ -90,9 +90,9 @@ def test_subdirectory_paths_preserved():
     assert reason == "ok"
     assert res is not None
     assert res == {
-        "/workspace/my-project-main/solution.py": "def fizzbuzz(n): pass",
-        "/workspace/my-project-main/helper.py": "def help(): pass",
-        "/workspace/my-project-main/subdir/data.json": '{"config": true}'
+        "/workspace/solution.py": "def fizzbuzz(n): pass",
+        "/workspace/helper.py": "def help(): pass",
+        "/workspace/subdir/data.json": '{"config": true}'
     }
 
 
