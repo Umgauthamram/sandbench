@@ -8,10 +8,11 @@ import {
   Plus, 
   ListChecks, 
   Trophy, 
-  Boxes, 
-  Bot, 
-  Settings, 
-  LogOut 
+  Boxes,
+  Bot,
+  FlaskConical,
+  Settings,
+  LogOut
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { SafeUser } from "../lib/types";
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/tasks", label: "Benchmark tasks", icon: Boxes },
   { href: "/playground", label: "RL playground", icon: Bot },
+  { href: "/rl-eval", label: "RL eval", icon: FlaskConical },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

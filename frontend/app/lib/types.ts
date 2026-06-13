@@ -1,7 +1,9 @@
 // Shared domain types — mirror the §4 data model in the build guide.
 // The frontend speaks these shapes; the FastAPI gateway will return them.
 
-export type SubmissionType = "code" | "files" /* | "api" | "model" */;
+// "model_eval" is a JOB type (Phase 2 RL eval), enqueued via /api/rl-eval.
+// The submit page still only offers "code" and "files".
+export type SubmissionType = "code" | "files" | "model_eval" /* | "api" | "model" */;
 
 export type Language = "python" | "node";
 

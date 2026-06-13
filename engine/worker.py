@@ -31,6 +31,133 @@ r = redis.from_url(UPSTASH_REDIS_URL, decode_responses=True)
 client = docker.from_env()
 
 
+def _handle_model_eval(job: dict, run_id: str, run_key: str, run_data, language: str) -> None:
+    """Phase 2 branch: evaluate a user-supplied model as the repair agent.
+
+    The model is called host-side (guarded by ssrf_guard); the sandbox only
+    scores code. Maps run_model_eval()'s result into the SAME run_data / result
+    shape the repair path writes.
+
+    KEY SAFETY: api_key is read from the job, passed only to run_model_eval, and
+    is NEVER written to run:{id}, sandbench:run:{id}, traces, the leaderboard,
+    or any log. trace_log is intentionally NOT called for model_eval runs.
+    """
+    from rl_env.model_eval import run_model_eval
+
+    task_id = job.get("taskId") or ""
+    broken_code = job.get("payload") or job.get("code") or ""
+    endpoint = job.get("modelEndpoint") or ""
+    api_key = job.get("modelApiKey") or ""
+
+    if run_data:
+        run_data["logs"].append("[model-eval] calling user model...")
+        r.set(run_key, json.dumps(run_data))
+
+    eval_res = run_model_eval(task_id, broken_code, endpoint, api_key)
+    # api_key is no longer needed and is not retained.
+    del api_key
+
+    finished_at = datetime.now(timezone.utc).isoformat() + "Z"
+
+    if eval_res.get("status") == "done":
+        score_after = eval_res.get("score_after")
+        score = score_after if isinstance(score_after, (int, float)) else 0.0
+        method = eval_res.get("method", "none")
+        patch_applied = bool(eval_res.get("patch_applied"))
+        reward = eval_res.get("reward")
+        review_text = eval_res.get("model_review_text") or ""
+
+        repair = {
+            "attempted": True,
+            "applied": patch_applied,
+            "method": method,
+            "score_before": eval_res.get("score_before"),
+            "score_after": score_after,
+            "reward": reward,
+        }
+        suggestions = []
+        if review_text:
+            suggestions.append({
+                "id": "sug_model_review",
+                "category": "tests",
+                "message": review_text[:2000],
+            })
+
+        result = {
+            "run_id": run_id,
+            "status": "done",
+            "verdict": "clean",
+            "score": score,
+            "flags": [],
+            "suggestions": suggestions,
+            "repair": repair,
+            "stdout": "",
+            "stderr": "",
+            "duration_ms": 0,
+            "exit_code": 0,
+            "finished_at": finished_at,
+        }
+        if run_data:
+            run_data["status"] = "done"
+            run_data["verdict"] = "clean"
+            run_data["score"] = score
+            run_data["finishedAt"] = finished_at
+            run_data["suggestions"] = suggestions
+            run_data["repair"] = repair
+            run_data["logs"].append(f"[model-eval] patch applied ({method})")
+            if isinstance(reward, (int, float)):
+                run_data["logs"].append(f"[model-eval] reward = {reward:+.4f}")
+            else:
+                run_data["logs"].append("[model-eval] reward = n/a")
+            r.set(run_key, json.dumps(run_data))
+        r.set(f"sandbench:run:{run_id}", json.dumps(result))
+        logger.info("Model-eval job %s completed (clean, reward=%s)", run_id, reward)
+        return
+
+    # Failure path (SSRF rejection / model call error / unknown task): quarantine,
+    # run NOTHING in the sandbox. The reason is guaranteed key-free by model_eval.
+    reason = eval_res.get("reason") or "model evaluation failed"
+    result = {
+        "run_id": run_id,
+        "status": "quarantined",
+        "verdict": "malicious",
+        "score": 0.0,
+        "flags": [
+            {
+                "rule_id": "MODEL_ENDPOINT_REJECTED",
+                "source": "worker",
+                "location": "model-endpoint",
+                "severity": "high",
+                "detail": f"[model-eval] endpoint rejected: {reason}",
+            }
+        ],
+        "stdout": "",
+        "stderr": f"[model-eval] endpoint rejected: {reason}",
+        "duration_ms": 0,
+        "exit_code": 0,
+        "finished_at": finished_at,
+    }
+    if run_data:
+        run_data["status"] = "quarantined"
+        run_data["verdict"] = "malicious"
+        run_data["score"] = 0.0
+        run_data["finishedAt"] = finished_at
+        run_data["flags"] = [
+            {
+                "id": "MODEL_ENDPOINT_REJECTED",
+                "source": "worker",
+                "rule": "MODEL_ENDPOINT_REJECTED",
+                "severity": "high",
+                "detail": f"[model-eval] endpoint rejected: {reason}",
+            }
+        ]
+        run_data["logs"].append(f"[model-eval] endpoint rejected: {reason}")
+        r.set(run_key, json.dumps(run_data))
+    r.set(f"sandbench:run:{run_id}", json.dumps(result))
+    logger.warning("Model-eval job %s quarantined: %s", run_id, reason)
+    return
+
+
 def handle(job: dict) -> None:
     """Process a single sandboxed execution job.
 
@@ -56,6 +183,13 @@ def handle(job: dict) -> None:
         run_data["status"] = "running"
         run_data["logs"].append("[worker] starting analysis pipeline...")
         r.set(run_key, json.dumps(run_data))
+
+    # Phase 2: model-evaluation jobs run the user's own model HOST-SIDE as the
+    # repair agent. The sandbox is never given the endpoint or key. Handled in
+    # a parallel branch that returns before the static-gate sandbox flow.
+    if job.get("type") == "model_eval":
+        _handle_model_eval(job, run_id, run_key, run_data, language)
+        return
 
     user_files = None
     if job.get("type") == "files":

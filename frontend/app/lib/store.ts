@@ -36,6 +36,12 @@ export interface SubmitInput {
   payload?: string; // code text, endpoint URL, etc.
   archiveB64?: string;
   archiveKind?: string; // "zip" | "targz"
+  // Phase 2 (model_eval) only. These flow to the worker via the job queue and
+  // are deliberately NOT written to the run record (run:{id}). The api key is
+  // single-run: it lives only in the queued job until the worker consumes it,
+  // and is never persisted to the run, leaderboard, or any log.
+  modelEndpoint?: string;
+  modelApiKey?: string;
 }
 
 function newId(): string {
