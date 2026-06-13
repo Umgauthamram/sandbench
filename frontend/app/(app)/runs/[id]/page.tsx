@@ -10,26 +10,53 @@ import { getCurrentUser } from "../../../lib/auth";
 
 export const dynamic = "force-dynamic";
 
-const VERDICT_COPY: Record<Verdict, { title: string; tone: string; border: string; body: string }> = {
+const VERDICT_BASE: Record<Verdict, { title: string; tone: string; border: string }> = {
   clean: {
     title: "Clean",
     tone: "text-emerald-400",
     border: "border-emerald-500/20 ring-emerald-500/10",
-    body: "No high-severity flags fired. Tests and analysis below.",
   },
   malicious: {
     title: "Malicious — quarantined",
     tone: "text-red-400",
     border: "border-red-500/30 ring-red-500/20",
-    body: "A high-severity flag fired. The container was force-destroyed and the run quarantined with score 0.",
   },
   broken: {
     title: "Broken",
     tone: "text-amber-400",
     border: "border-amber-500/20 ring-amber-500/10",
-    body: "Clean but failing. Routed to the analysis engine for concrete fixes.",
   },
 };
+
+function getVerdictCopy(
+  verdict: Verdict,
+  flags: { severity: string }[],
+  score: number | null | undefined
+): { title: string; tone: string; border: string; body: string } {
+  const base = VERDICT_BASE[verdict];
+  const mediumOrHighFlags = flags.filter(
+    (f) => f.severity === "medium" || f.severity === "high"
+  );
+
+  let body: string;
+  if (verdict === "malicious") {
+    body =
+      "A high-severity flag fired. The container was force-destroyed and the run quarantined with score 0.";
+  } else if (verdict === "broken") {
+    body = "The code ran but exited non-zero or timed out. Routed to the analysis engine for concrete fixes.";
+  } else {
+    // clean
+    if (mediumOrHighFlags.length > 0) {
+      body = `Code ran successfully but ${mediumOrHighFlags.length} security flag(s) were raised (medium severity). No high-severity violations — not quarantined.`;
+    } else if (typeof score === "number" && score === 0) {
+      body = "No security flags fired. Code executed cleanly but failed all hidden tests — check your logic.";
+    } else {
+      body = "No security flags fired. Tests and analysis below.";
+    }
+  }
+
+  return { ...base, body };
+}
 
 export default async function RunDetailPage({
   params,
@@ -50,7 +77,7 @@ export default async function RunDetailPage({
     notFound();
   }
 
-  const copy = run.verdict ? VERDICT_COPY[run.verdict] : null;
+  const copy = run.verdict ? getVerdictCopy(run.verdict, run.flags, run.score) : null;
 
   return (
     <>

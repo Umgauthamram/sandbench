@@ -695,7 +695,9 @@ def handle(job: dict) -> None:
                 if run_res.stderr:
                     run_data["logs"].append("--- stderr ---")
                     run_data["logs"].extend(run_res.stderr.splitlines())
-                run_data["logs"].append(f"[analysis] review complete ({len(suggestions)} suggestions)")
+                medium_flags = [f for f in flags if f.severity in (Severity.MEDIUM, Severity.LOW)]
+                flag_note = f", {len(medium_flags)} security flag(s) recorded" if medium_flags else ""
+                run_data["logs"].append(f"[analysis] review complete ({len(suggestions)} suggestions{flag_note})")
                 r.set(run_key, json.dumps(run_data))
 
         # Write exact JSON contract back to Redis
