@@ -345,10 +345,28 @@ def handle(job: dict) -> None:
                     "verdict": "clean",
                     "createdAt": result["finished_at"],
                 }
-                # Append to leaderboard list in Redis
+                # Upsert leaderboard entry: keep the higher score per (user, taskId)
                 lb_raw = r.get("leaderboard")
                 lb: list = json.loads(lb_raw) if lb_raw else []
-                lb.append(entry)
+                
+                existing_idx = -1
+                for idx, e in enumerate(lb):
+                    if e.get("user") == entry["user"] and e.get("taskId") == entry["taskId"]:
+                        existing_idx = idx
+                        break
+                
+                if existing_idx != -1:
+                    if entry["score"] > lb[existing_idx].get("score", 0.0):
+                        lb[existing_idx] = entry
+                        logger.info("Leaderboard entry updated (new high score %.2f)", entry["score"])
+                    else:
+                        logger.info(
+                            "Leaderboard entry not updated (existing score %.2f >= %.2f)",
+                            lb[existing_idx].get("score", 0.0), entry["score"]
+                        )
+                else:
+                    lb.append(entry)
+                    logger.info("New leaderboard entry appended")
                 # Sort descending by score, re-rank
                 lb.sort(key=lambda e: e.get("score", 0), reverse=True)
                 for idx, e in enumerate(lb):
@@ -384,6 +402,25 @@ def main() -> None:
     """Worker main loop."""
     # Run orphan cleanup on startup
     runner.cleanup_orphans(client)
+    
+    # Publish real task registry to Redis on startup
+    try:
+        tasks_map = task_registry.load_tasks()
+        public_list = []
+        for task in tasks_map.values():
+            scorer_label = "fraction of unit tests passed" if task.scorer == "pytest_fraction" else task.scorer
+            public_list.append({
+                "id": task.id,
+                "title": task.title,
+                "language": task.language,
+                "difficulty": task.difficulty,
+                "description": task.description,
+                "scorer": scorer_label
+            })
+        r.set("tasks", json.dumps(public_list))
+        logger.info("[worker] published %d tasks to Redis", len(public_list))
+    except Exception as exc:
+        logger.exception("[worker] failed to publish task registry: %s", exc)
     
     logger.info("worker up, waiting for jobs...")
     while True:

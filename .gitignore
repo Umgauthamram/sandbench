@@ -9,6 +9,7 @@ ENV/
 env/
 *.egg-info/
 .eggs/
+.env.local/
 
 # Node / Frontend
 node_modules/
@@ -43,3 +44,4 @@ extracted_starter/
 *.log
 traces.jsonl
 engine/traces.jsonl
+engine/submit_test_run.py

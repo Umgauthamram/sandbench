@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader } from "../../components/ui";
 import { TASKS } from "../../lib/mock";
 import type { SubmissionType } from "../../lib/types";
@@ -30,12 +30,25 @@ const SAMPLE = `def fizzbuzz(n):
 export default function SubmitPage() {
   const router = useRouter();
   const [type, setType] = useState<SubmissionType>("code");
-  const [taskId, setTaskId] = useState(TASKS[0].id);
+  const [tasks, setTasks] = useState(TASKS);
+  const [taskId, setTaskId] = useState(TASKS[0]?.id ?? "");
   const [code, setCode] = useState(SAMPLE);
   const [endpoint, setEndpoint] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/tasks")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.tasks?.length) {
+          setTasks(data.tasks);
+          setTaskId(data.tasks[0].id);
+        }
+      })
+      .catch((err) => console.error("Failed to load tasks:", err));
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -102,7 +115,7 @@ export default function SubmitPage() {
             onChange={(e) => setTaskId(e.target.value)}
             className="w-full max-w-md rounded-lg border border-border bg-background px-3 py-2 text-sm text-zinc-100 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           >
-            {TASKS.map((task) => (
+            {tasks.map((task) => (
               <option key={task.id} value={task.id}>
                 {task.title} · {task.language} · {task.difficulty}
               </option>

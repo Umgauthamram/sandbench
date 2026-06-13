@@ -54,7 +54,8 @@ export async function getRun(id: string): Promise<Run | null> {
 }
 
 export async function createRun(input: SubmitInput): Promise<Run> {
-  const task = TASKS.find((t) => t.id === input.taskId);
+  const tasks = await listTasks();
+  const task = tasks.find((t) => t.id === input.taskId);
   const language: Language = task?.language ?? "python";
   const id = newId();
 
@@ -101,6 +102,22 @@ export async function listLeaderboard(): Promise<LeaderboardEntry[]> {
 }
 
 export async function listTasks(): Promise<BenchmarkTask[]> {
-  // Benchmark tasks are part of the deployed app, not user data.
+  if (redisConfigured) {
+    try {
+      const raw = await redis.get("tasks");
+      if (raw) {
+        return JSON.parse(raw) as BenchmarkTask[];
+      }
+    } catch (err) {
+      console.error("Failed to read tasks from Redis:", err);
+    }
+  }
   return TASKS;
+}
+
+export async function listRepairRuns(): Promise<Run[]> {
+  const runs = await listRuns();
+  return runs
+    .filter((r) => r.repair?.attempted === true)
+    .slice(0, 20);
 }
