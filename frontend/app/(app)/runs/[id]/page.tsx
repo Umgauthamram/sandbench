@@ -17,6 +17,11 @@ const VERDICT_BASE: Record<Verdict, { title: string; tone: string; border: strin
     tone: "text-emerald-400",
     border: "border-emerald-500/20 ring-emerald-500/10",
   },
+  suspicious: {
+    title: "Suspicious",
+    tone: "text-amber-400",
+    border: "border-amber-500/20 ring-amber-500/10",
+  },
   malicious: {
     title: "Malicious — quarantined",
     tone: "text-red-400",
@@ -35,21 +40,21 @@ function getVerdictCopy(
   score: number | null | undefined
 ): { title: string; tone: string; border: string; body: string } {
   const base = VERDICT_BASE[verdict];
-  const mediumOrHighFlags = flags.filter(
-    (f) => f.severity === "medium" || f.severity === "high"
-  );
 
   let body: string;
   if (verdict === "malicious") {
     body =
       "A high-severity flag fired. The container was force-destroyed and the run quarantined with score 0.";
+  } else if (verdict === "suspicious") {
+    const flagCount = flags.filter(
+      (f) => f.severity === "medium" || f.severity === "high"
+    ).length;
+    body = `${flagCount} security flag(s) were raised (medium severity). The code ran but contains potentially dangerous patterns. Review the flags below.`;
   } else if (verdict === "broken") {
     body = "The code ran but exited non-zero or timed out. Routed to the analysis engine for concrete fixes.";
   } else {
     // clean
-    if (mediumOrHighFlags.length > 0) {
-      body = `Code ran successfully but ${mediumOrHighFlags.length} security flag(s) were raised (medium severity). No high-severity violations — not quarantined.`;
-    } else if (typeof score === "number" && score === 0) {
+    if (typeof score === "number" && score === 0) {
       body = "No security flags fired. Code executed cleanly but failed all hidden tests — check your logic.";
     } else {
       body = "No security flags fired. Tests and analysis below.";
@@ -153,34 +158,41 @@ export default async function RunDetailPage({
               Analysis &amp; suggestions
             </h2>
             <ul className="space-y-6">
-              {run.suggestions.map((s) => (
-                <li key={s.id}>
-                  <div className="mb-3 flex items-center gap-2">
-                    <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                      {s.category}
-                    </span>
-                  </div>
-                  <MarkdownRenderer content={s.message} />
-                  {s.patchDiff && (
-                    <pre className="mt-3 overflow-auto rounded-lg bg-zinc-950 p-4 font-mono text-xs leading-6 border border-zinc-800">
-                      {s.patchDiff.split("\n").map((line, i) => (
-                        <div
-                          key={i}
-                          className={
-                            line.startsWith("+")
-                              ? "text-emerald-400"
-                              : line.startsWith("-")
-                              ? "text-red-400"
-                              : "text-zinc-500"
-                          }
-                        >
-                          {line || " "}
-                        </div>
-                      ))}
-                    </pre>
-                  )}
-                </li>
-              ))}
+              {run.suggestions.map((s) => {
+                const isSystem = s.category === "system";
+                return (
+                  <li key={s.id} className={isSystem ? "rounded-lg border border-red-500/20 bg-red-500/5 p-4" : ""}>
+                    <div className="mb-3 flex items-center gap-2">
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        isSystem
+                          ? "bg-red-500/25 text-red-200"
+                          : "bg-zinc-800 text-zinc-400"
+                      }`}>
+                        {s.category}
+                      </span>
+                    </div>
+                    <MarkdownRenderer content={s.message} />
+                    {s.patchDiff && (
+                      <pre className="mt-3 overflow-auto rounded-lg bg-zinc-950 p-4 font-mono text-xs leading-6 border border-zinc-800">
+                        {s.patchDiff.split("\n").map((line, i) => (
+                          <div
+                            key={i}
+                            className={
+                              line.startsWith("+")
+                                ? "text-emerald-400"
+                                : line.startsWith("-")
+                                ? "text-red-400"
+                                : "text-zinc-500"
+                            }
+                          >
+                            {line || " "}
+                          </div>
+                        ))}
+                      </pre>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </Card>
         )}
@@ -246,12 +258,22 @@ export default async function RunDetailPage({
           </Card>
         )}
 
-        {/* Clean + nothing to suggest + no security flags */}
-        {run.verdict === "clean" && run.suggestions.length === 0 && run.flags.length === 0 && (
+        {/* Clean + perfect score/no score + nothing to suggest + no security flags */}
+        {run.verdict === "clean" && (run.score === null || run.score === undefined || run.score === 1.0) && run.suggestions.length === 0 && run.flags.length === 0 && (
           <Card className="lg:col-span-2">
             <p className="flex items-center gap-2.5 text-sm text-zinc-400">
               <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
               Tests pass and linters are clean. Nothing to suggest — looks good.
+            </p>
+          </Card>
+        )}
+
+        {/* Clean/Suspicious + failed tests + nothing to suggest */}
+        {(run.verdict === "clean" || run.verdict === "suspicious") && typeof run.score === "number" && run.score < 1.0 && run.suggestions.length === 0 && (
+          <Card className="lg:col-span-2">
+            <p className="flex items-center gap-2.5 text-sm text-zinc-400">
+              <CheckCircle2 className="h-5 w-5 text-amber-400 shrink-0" />
+              Some tests failed, but no suggestions are available. Check test stdout/stderr in the logs.
             </p>
           </Card>
         )}

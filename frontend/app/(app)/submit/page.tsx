@@ -14,26 +14,37 @@ const TYPES: { id: SubmissionType; label: string; hint: string; icon: typeof Cod
   // { id: "model", label: "Model",         hint: "Bring your own API key",     icon: Brain },
 ];
 
-const SAMPLE = `def fizzbuzz(n):
+const FALLBACK_BROKEN: Record<string, string> = {
+  fizzbuzz: `def fizzbuzz(n):
     out = []
     for i in range(1, n + 1):
-        if i % 15 == 0:
-            out.append("FizzBuzz")
-        elif i % 3 == 0:
+        if i % 3 == 0:
             out.append("Fizz")
         elif i % 5 == 0:
             out.append("Buzz")
         else:
-            out.append(str(i))
+            out.append(i)  # bug: should be str(i)
     return out
-`;
+`,
+  "json-flatten": `def flatten(obj, prefix="", sep="."):
+    result = {}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            result[prefix + k] = v  # bug: doesn't recurse
+    return result
+`,
+};
+
+function getBrokenCode(task: { id: string; broken_code?: string }): string {
+  return task.broken_code?.trim() || FALLBACK_BROKEN[task.id] || "";
+}
 
 export default function SubmitPage() {
   const router = useRouter();
   const [type, setType] = useState<SubmissionType>("code");
   const [tasks, setTasks] = useState(TASKS);
   const [taskId, setTaskId] = useState(TASKS[0]?.id ?? "");
-  const [code, setCode] = useState(SAMPLE);
+  const [code, setCode] = useState(() => getBrokenCode(TASKS[0] ?? { id: "" }));
   // const [endpoint, setEndpoint] = useState("");
   // const [apiKey, setApiKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -49,7 +60,9 @@ export default function SubmitPage() {
       .then((data) => {
         if (data?.tasks?.length) {
           setTasks(data.tasks);
-          setTaskId(data.tasks[0].id);
+          const firstTask = data.tasks[0];
+          setTaskId(firstTask.id);
+          setCode(getBrokenCode(firstTask));
         }
       })
       .catch((err) => console.error("Failed to load tasks:", err));
@@ -177,7 +190,14 @@ export default function SubmitPage() {
           </h2>
           <select
             value={taskId}
-            onChange={(e) => setTaskId(e.target.value)}
+            onChange={(e) => {
+              const newTaskId = e.target.value;
+              setTaskId(newTaskId);
+              const task = tasks.find((t) => t.id === newTaskId);
+              if (task) {
+                setCode(getBrokenCode(task));
+              }
+            }}
             className="w-full max-w-md rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
           >
             {tasks.map((task) => (

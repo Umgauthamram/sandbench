@@ -2,12 +2,14 @@ import type { RunStatus, Severity, Verdict } from "../lib/types";
 
 const VERDICT_STYLES: Record<Verdict, string> = {
   clean: "bg-clean/15 text-clean ring-clean/30",
+  suspicious: "bg-amber-500/15 text-amber-400 ring-amber-500/30",
   malicious: "bg-malicious/15 text-malicious ring-malicious/30",
   broken: "bg-broken/15 text-broken ring-broken/30",
 };
 
 const VERDICT_LABELS: Record<Verdict, string> = {
   clean: "Clean",
+  suspicious: "Suspicious",
   malicious: "Malicious",
   broken: "Broken",
 };

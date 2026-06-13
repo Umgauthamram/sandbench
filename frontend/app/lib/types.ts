@@ -14,7 +14,7 @@ export type RunStatus =
   | "quarantined"
   | "error";
 
-export type Verdict = "clean" | "malicious" | "broken";
+export type Verdict = "clean" | "suspicious" | "malicious" | "broken";
 
 export type FlagSource = "monitor" | "static";
 export type Severity = "low" | "medium" | "high";
@@ -32,7 +32,8 @@ export type SuggestionCategory =
   | "imports"
   | "security"
   | "tests"
-  | "style";
+  | "style"
+  | "system";
 
 export interface Suggestion {
   id: string;

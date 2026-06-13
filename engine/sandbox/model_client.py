@@ -47,6 +47,8 @@ def call_user_model(
     base = endpoint.rstrip("/")
     if base.endswith("/chat/completions"):
         url = base
+    elif base.endswith("/openai"):
+        url = base + "/chat/completions"
     elif base.endswith("/v1"):
         url = base + "/chat/completions"
     else:

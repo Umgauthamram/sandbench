@@ -516,15 +516,20 @@ def handle(job: dict) -> None:
             flags.extend(monitor_flags)
 
             # Determine final verdict and status
-            if any(f.severity == Severity.HIGH for f in flags):
+            has_high = any(f.severity == Severity.HIGH for f in flags)
+            has_medium = any(f.severity == Severity.MEDIUM for f in flags)
+            if has_high:
                 verdict, status, score = "malicious", "quarantined", 0.0
             elif run_res.exit_code != 0 or run_res.timed_out:
                 verdict, status, score = "broken", "done", None
+            elif has_medium:
+                verdict, status, score = "suspicious", "done", None
             else:
                 verdict, status, score = "clean", "done", None
 
-            # D) Score clean runs against hidden test suite
-            if verdict == "clean":
+            # D) Score clean/suspicious runs against hidden test suite
+            score_res = None  # will be passed to review engine
+            if verdict in ("clean", "suspicious"):
                 task_id = job.get("taskId") or ""
                 task = task_registry.get_task(task_id)
                 if task and task.language == language:
@@ -574,13 +579,13 @@ def handle(job: dict) -> None:
             # E) Run analysis engine (WP3) for clean/broken runs
             suggestions = []
             repair_data = None
-            if verdict in ("clean", "broken"):
+            if verdict in ("clean", "suspicious", "broken"):
                 try:
                     error_output = (run_res.stderr or "")[:4000]
-                    if verdict == "clean" and not error_output:
+                    if verdict in ("clean", "suspicious") and not error_output:
                         error_output = None
                     
-                    review_res = review.review_code(code, error_output)
+                    review_res = review.review_code(code, error_output, score_info=score_res)
                     
                     if review_res.get("ok"):
                         review_text = review_res.get("review_text", "")
@@ -605,7 +610,7 @@ def handle(job: dict) -> None:
                         
                         task_id = job.get("taskId") or ""
                         task = task_registry.get_task(task_id)
-                        has_room_to_improve = (verdict == "broken") or (verdict == "clean" and score is not None and score < 1.0)
+                        has_room_to_improve = (verdict == "broken") or (verdict in ("clean", "suspicious") and score is not None and score < 1.0)
                         
                         if has_room_to_improve and patch and patch.strip() and task:
                             attempted = True
@@ -689,9 +694,20 @@ def handle(job: dict) -> None:
                         except Exception as trace_err:
                             logger.exception("Failed to write training trace: %s", trace_err)
                     else:
-                        logger.warning("Analysis engine unavailable for run %s: %s", run_id, review_res.get("review_text", "unknown"))
+                        error_msg = review_res.get("review_text", "unknown")
+                        logger.warning("Analysis engine unavailable for run %s: %s", run_id, error_msg)
+                        suggestions.append({
+                            "id": "sug_review_unavailable",
+                            "category": "system",
+                            "message": f"**Analysis Engine Unavailable**: {error_msg}"
+                        })
                 except Exception as analysis_err:
                     logger.exception("Analysis engine execution failed for run %s: %s", run_id, analysis_err)
+                    suggestions.append({
+                        "id": "sug_review_failed",
+                        "category": "system",
+                        "message": f"**Analysis Engine Error**: {type(analysis_err).__name__}"
+                    })
             
             result = {
                 "run_id": run_id,
@@ -745,7 +761,7 @@ def handle(job: dict) -> None:
         logger.info("Job %s completed with status %s and verdict %s", run_id, result["status"], result["verdict"])
 
         # Write leaderboard entry for scored clean runs
-        if result.get("verdict") == "clean" and isinstance(result.get("score"), (int, float)):
+        if result.get("verdict") in ("clean", "suspicious") and isinstance(result.get("score"), (int, float)):
             try:
                 entry = {
                     "rank": 0,  # will be recalculated on read
@@ -755,7 +771,7 @@ def handle(job: dict) -> None:
                     "taskId": job.get("taskId") or "",
                     "taskTitle": run_data.get("taskTitle", job.get("taskId", "")) if run_data else job.get("taskId", ""),
                     "score": result["score"],
-                    "verdict": "clean",
+                    "verdict": result["verdict"],
                     "createdAt": result["finished_at"],
                 }
                 # Upsert leaderboard entry: keep the higher score per (user, taskId)
