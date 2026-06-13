@@ -27,24 +27,6 @@ export const TASKS: BenchmarkTask[] = [
       "Implement flatten(obj) that collapses a nested dict into dot-delimited keys.",
     scorer: "fraction of unit tests passed",
   },
-  {
-    id: "rate-limiter",
-    title: "Token-bucket rate limiter",
-    language: "node",
-    difficulty: "hard",
-    description:
-      "Build an in-memory token-bucket limiter with refill and burst handling.",
-    scorer: "fraction of unit tests passed",
-  },
-  {
-    id: "echo-api",
-    title: "Echo API latency",
-    language: "node",
-    difficulty: "easy",
-    description:
-      "Expose POST /echo that returns the request body. Scored on p95 latency.",
-    scorer: "latency (lower is better)",
-  },
 ];
 
 export const RUNS: Run[] = [

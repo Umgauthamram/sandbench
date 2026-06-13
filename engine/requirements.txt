@@ -7,3 +7,4 @@ bandit
 semgrep
 yara-python
 pyyaml
+patch-ng

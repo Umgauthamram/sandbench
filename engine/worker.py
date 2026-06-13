@@ -15,7 +15,7 @@ import docker
 from config import UPSTASH_REDIS_URL, LLM_PROVIDER
 from sandbox import runner, static_gate, monitor, review
 from sandbox.rules import Severity, Flag
-from analysis import trace_log
+from analysis import trace_log, patch_apply
 from scoring import registry as task_registry
 from scoring import score as scorer
 
@@ -163,6 +163,7 @@ def handle(job: dict) -> None:
 
             # E) Run analysis engine (WP3) for clean/broken runs
             suggestions = []
+            repair_data = None
             if verdict in ("clean", "broken"):
                 try:
                     error_output = (run_res.stderr or "")[:4000]
@@ -184,7 +185,78 @@ def handle(job: dict) -> None:
                             sug["patchDiff"] = patch
                         suggestions.append(sug)
                         
-                        # Log fine-tuning trace
+                        # --- WP5 REPAIR LOOP ---
+                        attempted = False
+                        applied = False
+                        method_str = "none"
+                        score_before_val = score if score is not None else 0.0
+                        score_after_val = None
+                        reward_val = None
+                        
+                        task_id = job.get("taskId") or ""
+                        task = task_registry.get_task(task_id)
+                        has_room_to_improve = (verdict == "broken") or (verdict == "clean" and score is not None and score < 1.0)
+                        
+                        if has_room_to_improve and patch and patch.strip() and task:
+                            attempted = True
+                            try:
+                                logger.info("Starting repair-and-rescore loop for run %s", run_id)
+                                patched_code, method_str = patch_apply.apply_patch(code, patch)
+                                
+                                if patched_code is None:
+                                    logger.info("[repair] patch did not apply: %s", method_str)
+                                    repair_data = {
+                                        "attempted": True,
+                                        "applied": False,
+                                        "method": method_str,
+                                        "score_before": score_before_val,
+                                        "score_after": None,
+                                        "reward": None
+                                    }
+                                else:
+                                    applied = True
+                                    logger.info("[repair] patch applied successfully via %s", method_str)
+                                    if run_data:
+                                        run_data["logs"].append(f"[repair] patch applied ({method_str})")
+                                        r.set(run_key, json.dumps(run_data))
+                                    
+                                    score_after_res = scorer.score_submission(patched_code, task)
+                                    score_after_val = score_after_res["score"]
+                                    passed_after = score_after_res.get("passed", 0)
+                                    total_after = score_after_res.get("total", 0)
+                                    reward_val = round(score_after_val - score_before_val, 4)
+                                    
+                                    logger.info(
+                                        "[repair] re-scored patched code: %d/%d passed, score=%.2f, reward=%+.2f",
+                                        passed_after, total_after, score_after_val, reward_val
+                                    )
+                                    if run_data:
+                                        run_data["logs"].append(
+                                            f"[repair] re-scored patched code: {passed_after}/{total_after} (score {score_after_val:.2f})"
+                                        )
+                                        run_data["logs"].append(f"[repair] reward = {reward_val:+.2f}")
+                                        r.set(run_key, json.dumps(run_data))
+                                    
+                                    repair_data = {
+                                        "attempted": True,
+                                        "applied": True,
+                                        "method": method_str,
+                                        "score_before": score_before_val,
+                                        "score_after": score_after_val,
+                                        "reward": reward_val
+                                    }
+                            except Exception as repair_err:
+                                logger.exception("Error in repair loop for run %s: %s", run_id, repair_err)
+                                repair_data = {
+                                    "attempted": True,
+                                    "applied": False,
+                                    "method": f"error: {type(repair_err).__name__}",
+                                    "score_before": score_before_val,
+                                    "score_after": None,
+                                    "reward": None
+                                }
+                        
+                        # Log fine-tuning trace (now containing reward fields)
                         try:
                             trace = {
                                 "trace_id": run_id,
@@ -196,7 +268,12 @@ def handle(job: dict) -> None:
                                 "review_text": review_text,
                                 "patch": patch or "",
                                 "model": LLM_PROVIDER,
-                                "created_at": datetime.now(timezone.utc).isoformat() + "Z"
+                                "created_at": datetime.now(timezone.utc).isoformat() + "Z",
+                                # WP5 fields:
+                                "score_before": score_before_val if attempted else None,
+                                "score_after": score_after_val,
+                                "reward": reward_val,
+                                "patch_applied": applied
                             }
                             trace_log.log_trace(trace)
                         except Exception as trace_err:
@@ -205,7 +282,7 @@ def handle(job: dict) -> None:
                         logger.warning("Analysis engine unavailable for run %s: %s", run_id, review_res.get("review_text", "unknown"))
                 except Exception as analysis_err:
                     logger.exception("Analysis engine execution failed for run %s: %s", run_id, analysis_err)
-
+            
             result = {
                 "run_id": run_id,
                 "status": status,
@@ -219,7 +296,9 @@ def handle(job: dict) -> None:
                 "exit_code": run_res.exit_code,
                 "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
             }
-
+            if repair_data:
+                result["repair"] = repair_data
+            
             # Enrich and update the frontend representation if available
             if run_data:
                 run_data["status"] = status
@@ -237,6 +316,8 @@ def handle(job: dict) -> None:
                     for f in flags
                 ]
                 run_data["suggestions"] = suggestions
+                if repair_data:
+                    run_data["repair"] = repair_data
                 run_data["logs"].append(f"[worker] container finished with exit code {run_res.exit_code}")
                 if run_res.stdout:
                     run_data["logs"].append("--- stdout ---")

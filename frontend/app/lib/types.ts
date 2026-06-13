@@ -39,6 +39,15 @@ export interface Suggestion {
   patchDiff?: string;
 }
 
+export interface RunRepair {
+  attempted: boolean;
+  applied: boolean;
+  method: string;
+  score_before: number;
+  score_after: number | null;
+  reward: number | null;
+}
+
 export interface Run {
   id: string;
   submissionId: string;
@@ -55,6 +64,7 @@ export interface Run {
   flags: SecurityFlag[];
   suggestions: Suggestion[];
   logs: string[];
+  repair?: RunRepair;
 }
 
 export interface BenchmarkTask {

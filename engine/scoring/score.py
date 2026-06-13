@@ -75,8 +75,13 @@ def score_submission(code: str, task: Task) -> Dict[str, Any]:
         tests_dir = task.tests_dir
 
         if tests_dir.is_dir():
-            for root, _dirs, files in os.walk(tests_dir):
+            for root, dirs, files in os.walk(tests_dir):
+                # Prune __pycache__ directories
+                if "__pycache__" in dirs:
+                    dirs.remove("__pycache__")
                 for fname in files:
+                    if fname.endswith(".pyc") or fname.endswith(".pyo"):
+                        continue
                     file_path = os.path.join(root, fname)
                     rel_path = os.path.relpath(file_path, tests_dir)
                     # Normalize path separators for the container (Linux)
@@ -106,10 +111,14 @@ def score_submission(code: str, task: Task) -> Dict[str, Any]:
             task.id, len(extra_files), task.test_command,
         )
 
+        # Use our built golden python image so pytest is available inside the offline sandbox
+        image = "sandbench/python:golden" if task.language.lower() == "python" else None
+
         # Run the test suite inside a fresh hardened sandbox
         run_res = runner.run(
             code,
             task.language,
+            image=image,
             extra_files=extra_files,
             command=task.test_command,
         )

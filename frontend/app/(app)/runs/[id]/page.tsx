@@ -140,6 +140,58 @@ export default async function RunDetailPage({
           </Card>
         )}
 
+        {/* Repair attempt */}
+        {run.repair && run.repair.attempted && (
+          <Card className="lg:col-span-2">
+            <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
+              Repair attempt
+            </h2>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Applied</p>
+                <p className="mt-1 text-sm font-medium text-zinc-200">
+                  {run.repair.applied ? "Yes" : "No"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Method</p>
+                <p className="mt-1 text-sm font-medium text-zinc-200">
+                  {run.repair.method}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Score Change</p>
+                <p className="mt-1 text-sm font-medium text-zinc-200">
+                  {Math.round(run.repair.score_before * 100)}% →{" "}
+                  {run.repair.score_after !== null
+                    ? `${Math.round(run.repair.score_after * 100)}%`
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Reward</p>
+                <p
+                  className={`mt-1 text-sm font-mono font-semibold ${
+                    run.repair.reward === null
+                      ? "text-broken"
+                      : run.repair.reward > 0
+                        ? "text-clean"
+                        : run.repair.reward === 0
+                          ? "text-zinc-400"
+                          : "text-broken"
+                  }`}
+                >
+                  {run.repair.reward !== null
+                    ? (run.repair.reward > 0
+                      ? `+${run.repair.reward.toFixed(2)}`
+                      : run.repair.reward.toFixed(2))
+                    : "—"}
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Clean + nothing to suggest */}
         {run.verdict === "clean" && run.suggestions.length === 0 && (
           <Card className="lg:col-span-2">

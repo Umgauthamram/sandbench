@@ -7,5 +7,5 @@ description: >
   For example, {"a": {"b": 1}} becomes {"a.b": 1}. Lists should be flattened
   with their integer index as the key segment.
 entrypoint: solution.py
-test_command: ["python", "-m", "pytest", "-q", "/workspace/tests/", "--tb=no"]
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
 scorer: pytest_fraction

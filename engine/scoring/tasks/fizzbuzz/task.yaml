@@ -7,5 +7,5 @@ description: >
   "FizzBuzz" for multiples of 15, "Fizz" for multiples of 3,
   "Buzz" for multiples of 5, and the integer itself otherwise.
 entrypoint: solution.py
-test_command: ["python", "-m", "pytest", "-q", "/workspace/tests/", "--tb=no"]
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
 scorer: pytest_fraction
