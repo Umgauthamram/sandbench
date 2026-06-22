@@ -32,7 +32,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
 
       if (!res.ok) {
         throw new Error(data.error || "Something went wrong. Please try again.");
@@ -40,8 +40,8 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
       router.push("/dashboard");
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       setSubmitting(false);
     }
   }

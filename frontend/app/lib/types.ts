@@ -89,8 +89,17 @@ export interface BenchmarkTask {
   language: Language;
   difficulty: "easy" | "medium" | "hard";
   description: string;
+  entrypoint?: string;
   scorer: string;
   broken_code?: string; // intentionally buggy seed for RL eval
+  suite?: string;
+  capability?: string;
+  tags?: string[];
+  source?: string;
+  version?: string;
+  human_baseline_minutes?: number | null;
+  hidden_test_files?: number;
+  benchmark_ready?: boolean;
 }
 
 export interface LeaderboardEntry {

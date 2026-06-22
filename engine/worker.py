@@ -28,7 +28,6 @@ JOBS_KEY = "sandbench:jobs"
 
 # Initialize Redis client using the centralized config
 r = redis.from_url(UPSTASH_REDIS_URL, decode_responses=True)
-client = docker.from_env()
 
 
 def _handle_model_eval(job: dict, run_id: str, run_key: str, run_data, language: str) -> None:
@@ -836,6 +835,8 @@ def handle(job: dict) -> None:
 
 def main() -> None:
     """Worker main loop."""
+    client = docker.from_env()
+
     # Run orphan cleanup on startup
     runner.cleanup_orphans(client)
     
@@ -856,19 +857,7 @@ def main() -> None:
 
     # Publish real task registry to Redis on startup
     try:
-        tasks_map = task_registry.load_tasks()
-        public_list = []
-        for task in tasks_map.values():
-            scorer_label = "fraction of unit tests passed" if task.scorer == "pytest_fraction" else task.scorer
-            public_list.append({
-                "id": task.id,
-                "title": task.title,
-                "language": task.language,
-                "difficulty": task.difficulty,
-                "description": task.description,
-                "scorer": scorer_label,
-                "broken_code": task.broken_code or "",
-            })
+        public_list = task_registry.load_public_tasks()
         r.set("tasks", json.dumps(public_list))
         logger.info("[worker] published %d tasks to Redis", len(public_list))
     except Exception as exc:

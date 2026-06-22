@@ -1,18 +1,6 @@
 import type { Metadata } from "next";
-import { Poppins, Geist_Mono } from "next/font/google";
 import { SplashScreen } from "./components/splash-screen";
 import "./globals.css";
-
-const poppins = Poppins({
-  weight: ["300", "400", "500", "600", "700", "800"],
-  variable: "--font-poppins",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "SandBench — RL benchmarking in an isolated sandbox",
@@ -28,7 +16,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${poppins.variable} ${geistMono.variable} h-full antialiased dark`}
+      className="h-full antialiased dark"
     >
       <body className="min-h-full flex flex-col">
         <SplashScreen />

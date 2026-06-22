@@ -2,6 +2,13 @@ id: json-flatten
 title: Flatten nested JSON
 language: python
 difficulty: medium
+suite: core
+capability: data_transformation
+tags: ["python", "recursion", "data-structures"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 15
+benchmark_ready: false
 description: >
   Implement flatten(obj) that collapses a nested dict into dot-delimited keys.
   For example, {"a": {"b": 1}} becomes {"a.b": 1}. Lists should be flattened
@@ -16,4 +23,3 @@ broken_code: |
           for k, v in obj.items():
               result[prefix + k] = v  # bug: doesn't recurse into nested dicts/lists
       return result
-

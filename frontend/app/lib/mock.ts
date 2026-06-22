@@ -16,7 +16,16 @@ export const TASKS: BenchmarkTask[] = [
     difficulty: "easy",
     description:
       "Print numbers 1–100, replacing multiples of 3 with Fizz, 5 with Buzz, and 15 with FizzBuzz.",
+    entrypoint: "solution.py",
     scorer: "fraction of unit tests passed",
+    suite: "core",
+    capability: "function_correctness",
+    tags: ["python", "control-flow", "edge-cases"],
+    source: "sandbench",
+    version: "0.1.0",
+    human_baseline_minutes: 5,
+    hidden_test_files: 1,
+    benchmark_ready: false,
     broken_code: `def fizzbuzz(n):
     out = []
     for i in range(1, n + 1):
@@ -36,13 +45,53 @@ export const TASKS: BenchmarkTask[] = [
     difficulty: "medium",
     description:
       "Implement flatten(obj) that collapses a nested dict into dot-delimited keys.",
+    entrypoint: "solution.py",
     scorer: "fraction of unit tests passed",
+    suite: "core",
+    capability: "data_transformation",
+    tags: ["python", "recursion", "data-structures"],
+    source: "sandbench",
+    version: "0.1.0",
+    human_baseline_minutes: 15,
+    hidden_test_files: 1,
+    benchmark_ready: false,
     broken_code: `def flatten(obj, prefix="", sep="."):
     result = {}
     if isinstance(obj, dict):
         for k, v in obj.items():
             result[prefix + k] = v  # bug: doesn't recurse into nested dicts/lists
     return result
+`,
+  },
+  {
+    id: "rate-limiter",
+    title: "Token bucket rate limiter",
+    language: "python",
+    difficulty: "medium",
+    description:
+      "Implement a per-key token bucket limiter with deterministic time-based refill behavior.",
+    entrypoint: "solution.py",
+    scorer: "fraction of unit tests passed",
+    suite: "core",
+    capability: "stateful_system_design",
+    tags: ["python", "state", "time", "backend"],
+    source: "sandbench",
+    version: "0.1.0",
+    human_baseline_minutes: 25,
+    hidden_test_files: 1,
+    benchmark_ready: false,
+    broken_code: `class TokenBucketRateLimiter:
+    def __init__(self, capacity, refill_rate):
+        self.capacity = capacity
+        self.refill_rate = refill_rate
+        self.remaining = capacity
+
+    def allow(self, key, now=None):
+        # bug: global counter, no per-key state, no refill behavior
+        if self.remaining <= 0:
+            return False
+        self.remaining -= 1
+        return True
 `,
   },
 ];

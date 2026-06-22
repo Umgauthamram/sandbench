@@ -46,8 +46,8 @@
   --color-foreground: var(--foreground);
   --color-panel: var(--panel);
   --color-border: var(--border);
-  --font-sans: var(--font-poppins);
-  --font-mono: var(--font-poppins);
+  --font-sans: "Segoe UI", Inter, Arial, Helvetica, sans-serif;
+  --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 
   /* Verdict palette — surfaced everywhere a run is shown */
   --color-clean: #34d399; /* emerald-400 */
@@ -57,7 +57,7 @@
 }
 
 body {
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
   font-size: 1.025rem;
   line-height: 1.625;
   background-color: #09090b; /* zinc-950 always, regardless of cascade order */

@@ -1,0 +1,33 @@
+id: rate-limiter
+title: Token bucket rate limiter
+language: python
+difficulty: medium
+suite: core
+capability: stateful_system_design
+tags: ["python", "state", "time", "backend"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 25
+benchmark_ready: false
+description: >
+  Implement TokenBucketRateLimiter(capacity, refill_rate). allow(key, now=None)
+  should return True when a request for key is allowed and False when the
+  bucket is empty. Buckets are independent per key, start full, refill at
+  refill_rate tokens per second, and cap at capacity. When now is omitted, use
+  time.monotonic().
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  class TokenBucketRateLimiter:
+      def __init__(self, capacity, refill_rate):
+          self.capacity = capacity
+          self.refill_rate = refill_rate
+          self.remaining = capacity
+
+      def allow(self, key, now=None):
+          # bug: global counter, no per-key state, no refill behavior
+          if self.remaining <= 0:
+              return False
+          self.remaining -= 1
+          return True

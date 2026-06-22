@@ -13,7 +13,10 @@ import sys
 import tempfile
 from typing import List
 
-import yara
+try:
+    import yara
+except ImportError:  # pragma: no cover - depends on optional native wheel
+    yara = None
 
 from sandbox.rules import Flag, make_flag
 
@@ -79,11 +82,15 @@ rule env_exfil {
 """
 
 # Compile YARA rules once at module load
-try:
-    YARA_RULES = yara.compile(source=RULES_SOURCE)
-except Exception as e:
-    logger.error("Failed to compile inline YARA rules: %s", e)
+if yara is None:
+    logger.warning("yara-python is not installed; skipping YARA signatures")
     YARA_RULES = None
+else:
+    try:
+        YARA_RULES = yara.compile(source=RULES_SOURCE)
+    except Exception as e:
+        logger.error("Failed to compile inline YARA rules: %s", e)
+        YARA_RULES = None
 
 
 def scan(code: str, language: str, workdir: str) -> List[Flag]:

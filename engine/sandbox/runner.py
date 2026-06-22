@@ -43,10 +43,18 @@ from config import (
 )
 
 logger = logging.getLogger(__name__)
-client = docker.from_env()
+client: docker.DockerClient | None = None
 
 # The only writable area at runtime. RAM-backed, hard size cap.
 TMPFS = {"/tmp": "rw,size=16m,mode=1777"}
+
+
+def _get_client() -> docker.DockerClient:
+    """Create the Docker client only when a sandbox run actually needs it."""
+    global client
+    if client is None:
+        client = docker.from_env()
+    return client
 
 
 @dataclass
@@ -156,8 +164,9 @@ def run(
 
     start_time = time.perf_counter()
     try:
+        docker_client = _get_client()
         try:
-            container = client.containers.create(
+            container = docker_client.containers.create(
                 image,
                 command=run_cmd,
                 working_dir="/tmp",
@@ -176,8 +185,8 @@ def run(
             )
         except docker.errors.ImageNotFound:
             logger.info("Image %s not found locally. Pulling image...", image)
-            client.images.pull(image)
-            container = client.containers.create(
+            docker_client.images.pull(image)
+            container = docker_client.containers.create(
                 image,
                 command=run_cmd,
                 working_dir="/tmp",

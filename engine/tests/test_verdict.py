@@ -11,9 +11,6 @@ from typing import Tuple, List
 from sandbox import runner, static_gate, monitor
 from sandbox.rules import Severity, Flag
 
-# Initialize Docker client for checks in tests
-client = docker.from_env()
-
 
 def run_pipeline(code: str, language: str = "python") -> Tuple[str, List[Flag], bool]:
     """Execute the pipeline (static gate -> runner -> monitor).
@@ -110,6 +107,7 @@ except Exception as e:
 def test_base64_exec_quarantined():
     """4. import base64; exec(base64.b64decode('cHJpbnQoMSk=')) -> verdict 'malicious' from STATIC GATE, assert no container created"""
     code = "import base64; exec(base64.b64decode('cHJpbnQoMSk='))"
+    client = docker.from_env()
     
     # Get active container count before execution
     initial_containers = client.containers.list(all=True, filters={"label": "sandbench=1"})
@@ -134,6 +132,7 @@ import os
 while True:
     os.fork()
 """
+    client = docker.from_env()
     # Get initial containers list
     initial_containers = client.containers.list(all=True, filters={"label": "sandbench=1"})
     

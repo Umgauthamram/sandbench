@@ -10,6 +10,49 @@ const memEmails = new Map<string, string>(); // normalizedEmail -> userId
 const memSessions = new Map<string, { userId: string; createdAt: string }>();
 const memUserSessions = new Map<string, Set<string>>(); // userId -> Set<token>
 
+class AuthError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+    this.name = "AuthError";
+  }
+}
+
+type LeaderboardRecord = {
+  rank?: number;
+  user?: string;
+  userId?: string;
+};
+
+function toSafeUser(user: User): SafeUser {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    createdAt: user.createdAt,
+  };
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isDynamicServerUsageError(err: unknown): boolean {
+  return isObjectRecord(err) && err.digest === "DYNAMIC_SERVER_USAGE";
+}
+
+function hasRunUserId(value: unknown, userId: string): boolean {
+  return isObjectRecord(value) && value.userId === userId;
+}
+
+function toLeaderboardRecord(value: unknown): LeaderboardRecord | null {
+  if (!isObjectRecord(value)) return null;
+  return {
+    rank: typeof value.rank === "number" ? value.rank : undefined,
+    user: typeof value.user === "string" ? value.user : undefined,
+    userId: typeof value.userId === "string" ? value.userId : undefined,
+  };
+}
+
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, 12);
 }
@@ -31,9 +74,7 @@ export async function createUser({
 
   if (!redisConfigured) {
     if (memEmails.has(normalizedEmail)) {
-      const err = new Error("Email already registered");
-      (err as any).status = 409;
-      throw err;
+      throw new AuthError("Email already registered", 409);
     }
     const id = `usr_${crypto.randomUUID().replace(/-/g, "")}`;
     const passwordHash = await hashPassword(password);
@@ -46,17 +87,14 @@ export async function createUser({
     };
     memUsers.set(id, user);
     memEmails.set(normalizedEmail, id);
-    
-    const { passwordHash: _, ...safeUser } = user;
-    return safeUser;
+
+    return toSafeUser(user);
   }
 
   // Redis path
   const existingId = await redis.get(`user:email:${normalizedEmail}`);
   if (existingId) {
-    const err = new Error("Email already registered");
-    (err as any).status = 409;
-    throw err;
+    throw new AuthError("Email already registered", 409);
   }
 
   const id = `usr_${crypto.randomUUID().replace(/-/g, "")}`;
@@ -74,8 +112,7 @@ export async function createUser({
   await redis.set(`user:email:${normalizedEmail}`, id);
   await redis.lpush("users:index", id);
 
-  const { passwordHash: _, ...safeUser } = user;
-  return safeUser;
+  return toSafeUser(user);
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
@@ -160,9 +197,11 @@ export async function getCurrentUser(): Promise<SafeUser | null> {
     const user = await getUserById(session.userId);
     if (!user) return null;
 
-    const { passwordHash, ...safeUser } = user;
-    return safeUser;
+    return toSafeUser(user);
   } catch (err) {
+    if (isDynamicServerUsageError(err)) {
+      throw err;
+    }
     console.error("Error in getCurrentUser:", err);
     return null;
   }
@@ -211,8 +250,8 @@ export async function deleteUserAndData(userId: string): Promise<void> {
     for (const runId of runIds) {
       const runRaw = await redis.get(`run:${runId}`);
       if (runRaw) {
-        const run = JSON.parse(runRaw);
-        if (run.userId === userId) {
+        const run = JSON.parse(runRaw) as unknown;
+        if (hasRunUserId(run, userId)) {
           await redis.del(`run:${runId}`);
           await redis.lrem("runs:index", 0, runId);
         }
@@ -223,14 +262,18 @@ export async function deleteUserAndData(userId: string): Promise<void> {
   // 4. Filter user's entries out of the leaderboard JSON
   const lbRaw = await redis.get("leaderboard");
   if (lbRaw) {
-    const lb = JSON.parse(lbRaw);
+    const lb = JSON.parse(lbRaw) as unknown;
     if (Array.isArray(lb)) {
-      const filtered = lb.filter(
-        (entry: any) => entry.userId !== userId && entry.user !== user.name
-      );
+      const filtered = lb.filter((entry) => {
+        const record = toLeaderboardRecord(entry);
+        if (!record) return true;
+        return record.userId !== userId && record.user !== user.name;
+      });
       // Recalculate rank
-      filtered.forEach((e: any, i: number) => {
-        e.rank = i + 1;
+      filtered.forEach((entry, i) => {
+        if (isObjectRecord(entry)) {
+          entry.rank = i + 1;
+        }
       });
       await redis.set("leaderboard", JSON.stringify(filtered));
     }

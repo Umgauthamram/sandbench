@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "../../components/ui";
-import { AlertTriangle, Key } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import type { SafeUser } from "../../lib/types";
 
 export function SettingsForm({ user }: { user: SafeUser }) {
@@ -12,29 +12,6 @@ export function SettingsForm({ user }: { user: SafeUser }) {
   const [confirmEmail, setConfirmEmail] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [theme, setTheme] = useState("dark");
-
-  const themes = [
-    {
-      id: "system",
-      name: "System Theme",
-      desc: "Synchronize theme with operating system settings",
-      activeLabel: "System Default",
-    },
-    {
-      id: "dark",
-      name: "Lifted Dark",
-      desc: "Deep zinc tones optimized for long debugging runs",
-      activeLabel: "Active Theme",
-    },
-    {
-      id: "light",
-      name: "Light Mode",
-      desc: "Clean high-contrast theme (Currently unavailable)",
-      disabled: true,
-      activeLabel: "Coming Soon",
-    },
-  ];
 
   const handleDeleteAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,8 +35,8 @@ export function SettingsForm({ user }: { user: SafeUser }) {
 
       router.push("/signup");
       router.refresh();
-    } catch (err: any) {
-      setDeleteError(err.message);
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete account");
       setDeleting(false);
     }
   };

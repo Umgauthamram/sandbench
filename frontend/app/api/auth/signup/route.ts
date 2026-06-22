@@ -5,12 +5,30 @@ export const dynamic = "force-dynamic";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type SignupBody = {
+  email?: unknown;
+  name?: unknown;
+  password?: unknown;
+};
+
+function getErrorStatus(err: unknown): number | undefined {
+  if (typeof err !== "object" || err === null || !("status" in err)) {
+    return undefined;
+  }
+  const status = (err as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = (await request.json()) as SignupBody;
     const { email, name, password } = body;
 
-    if (!email || !name || !password) {
+    if (
+      typeof email !== "string" ||
+      typeof name !== "string" ||
+      typeof password !== "string"
+    ) {
       return NextResponse.json(
         { error: "Email, name, and password are required" },
         { status: 400 }
@@ -43,8 +61,9 @@ export async function POST(request: Request) {
     await setSessionCookie(token);
 
     return NextResponse.json({ ok: true, user });
-  } catch (err: any) {
-    if (err.status === 409 || err.message === "Email already registered") {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "";
+    if (getErrorStatus(err) === 409 || message === "Email already registered") {
       return NextResponse.json(
         { error: "Email already registered" },
         { status: 409 }

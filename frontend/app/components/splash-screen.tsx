@@ -11,8 +11,10 @@ export function SplashScreen() {
     const splashed = sessionStorage.getItem("sandbench_splashed");
     if (splashed) return;
 
-    setMounted(true);
-    setVisible(true);
+    const startTimer = setTimeout(() => {
+      setMounted(true);
+      setVisible(true);
+    }, 0);
 
     const fadeTimer = setTimeout(() => {
       setVisible(false);
@@ -24,6 +26,7 @@ export function SplashScreen() {
     }, 2600);
 
     return () => {
+      clearTimeout(startTimer);
       clearTimeout(fadeTimer);
       clearTimeout(unmountTimer);
     };
