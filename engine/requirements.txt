@@ -3,8 +3,10 @@ uvicorn==0.30.6
 redis==5.0.8
 docker==7.1.0
 python-dotenv==1.0.1
+pydantic>=2.0
 bandit
 semgrep
 yara-python
 pyyaml
 patch-ng
+pytest-asyncio

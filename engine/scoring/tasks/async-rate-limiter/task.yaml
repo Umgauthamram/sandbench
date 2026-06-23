@@ -1,0 +1,34 @@
+id: async-rate-limiter
+title: Async sliding window rate limiter
+language: python
+difficulty: hard
+suite: core
+capability: concurrency
+tags: ["python", "async", "concurrency", "rate-limiting", "sliding-window"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 35
+benchmark_ready: true
+description: >
+  Implement an async sliding-window rate limiter class SlidingWindowLimiter.
+  The constructor takes max_requests (int) and window_seconds (float).
+  The method async is_allowed(key, now=None) returns True if the request
+  for the given key is within the rate limit and False otherwise. It uses
+  a sliding window algorithm: count requests in the last window_seconds
+  for each key. If now is None, use time.monotonic(). Each call to
+  is_allowed that returns True records the request timestamp. Old timestamps
+  outside the window should be cleaned up. Keys are independent.
+  Raise ValueError if max_requests <= 0 or window_seconds <= 0.
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  class SlidingWindowLimiter:
+      def __init__(self, max_requests, window_seconds):
+          self.max = max_requests
+          self.window = window_seconds
+          self.count = 0
+
+      async def is_allowed(self, key, now=None):
+          self.count += 1
+          return self.count <= self.max  # bug: no sliding window, no per-key, not async-safe

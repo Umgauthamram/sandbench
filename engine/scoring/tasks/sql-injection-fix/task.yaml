@@ -1,0 +1,36 @@
+id: sql-injection-fix
+title: SQL injection sanitizer
+language: python
+difficulty: hard
+suite: core
+capability: security_fix
+tags: ["python", "security", "sql", "sanitization", "injection"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 30
+benchmark_ready: true
+description: >
+  Implement a class SafeQueryBuilder that builds parameterized SQL queries
+  safely. The constructor takes a table name (string). Methods: select(columns)
+  returns self, where(conditions_dict) returns self, order_by(column, direction)
+  returns self, limit(n) returns self, and build() returns a tuple of
+  (query_string, params_list). The query string must use ? placeholders for all
+  user-supplied values. The table name and column names must be validated against
+  an allowlist pattern (alphanumeric + underscore only). Raise ValueError for
+  any injection attempt or invalid input. Direction must be "ASC" or "DESC".
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  class SafeQueryBuilder:
+      def __init__(self, table):
+          self.table = table
+          self.query = f"SELECT * FROM {table}"  # bug: no validation, direct interpolation
+
+      def where(self, conditions):
+          for k, v in conditions.items():
+              self.query += f" WHERE {k} = '{v}'"  # bug: SQL injection
+          return self
+
+      def build(self):
+          return (self.query, [])

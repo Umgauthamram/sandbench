@@ -183,6 +183,14 @@ sandbench/
    ```bash
    python worker.py
    ```
+7. Validate that all benchmark tasks are compliant with the Pydantic schema and readiness gates:
+   ```bash
+   python -m scoring.registry --strict
+   ```
+8. Run the test suite to verify the engine and registry components:
+   ```bash
+   python -m pytest
+   ```
 
 #### 2. Setup the Frontend
 1. Navigate to the frontend folder:

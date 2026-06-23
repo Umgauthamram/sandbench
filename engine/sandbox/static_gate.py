@@ -82,15 +82,50 @@ rule env_exfil {
 """
 
 # Compile YARA rules once at module load
+class FallbackYaraRules:
+    class MatchResult:
+        def __init__(self, rule: str):
+            self.rule = rule
+
+    def match(self, data: bytes) -> List[Any]:
+        text = data.decode("utf-8", errors="ignore")
+        matches = []
+        
+        # rule reverse_shell
+        reverse_shell_strings = ["/dev/tcp/", "sh -i", "nc -e", "bash -i >&"]
+        if any(s in text for s in reverse_shell_strings):
+            matches.append(self.MatchResult("reverse_shell"))
+            
+        # rule crypto_miner
+        crypto_miner_strings = ["stratum+tcp://", "xmrig", "minerd", "cryptonight"]
+        if any(s in text for s in crypto_miner_strings):
+            matches.append(self.MatchResult("crypto_miner"))
+            
+        # rule b64_exec_combo
+        b64_in = "base64" in text
+        exec_or_eval = ("exec(" in text) or ("eval(" in text)
+        if b64_in and exec_or_eval:
+            matches.append(self.MatchResult("b64_exec_combo"))
+            
+        # rule env_exfil
+        env_in = "os.environ" in text
+        req_url_sock = ("requests.post" in text) or ("urllib" in text) or ("socket" in text)
+        if env_in and req_url_sock:
+            matches.append(self.MatchResult("env_exfil"))
+            
+        return matches
+
+from typing import Any
+
 if yara is None:
-    logger.warning("yara-python is not installed; skipping YARA signatures")
-    YARA_RULES = None
+    logger.warning("yara-python is not installed; using pure-Python fallback YARA rules")
+    YARA_RULES = FallbackYaraRules()
 else:
     try:
         YARA_RULES = yara.compile(source=RULES_SOURCE)
     except Exception as e:
         logger.error("Failed to compile inline YARA rules: %s", e)
-        YARA_RULES = None
+        YARA_RULES = FallbackYaraRules()
 
 
 def scan(code: str, language: str, workdir: str) -> List[Flag]:

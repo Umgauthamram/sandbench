@@ -1,0 +1,21 @@
+{
+  "schema": "sandbench.chat_finetune.v0",
+  "created_at": "2026-06-22T23:22:32.479354+00:00",
+  "source": "traces.jsonl",
+  "redacted": true,
+  "validation_ratio": 0.1,
+  "counts": {
+    "train": 22,
+    "validation": 1,
+    "skipped": 3,
+    "total_exported": 23
+  },
+  "tasks": {
+    "fizzbuzz": 23
+  },
+  "files": {
+    "train": "..\\datasets\\sandbench-traces-v0\\train.jsonl",
+    "validation": "..\\datasets\\sandbench-traces-v0\\validation.jsonl",
+    "manifest": "..\\datasets\\sandbench-traces-v0\\manifest.json"
+  }
+}

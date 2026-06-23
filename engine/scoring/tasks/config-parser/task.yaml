@@ -1,0 +1,32 @@
+id: config-parser
+title: INI config parser
+language: python
+difficulty: easy
+suite: core
+capability: file_io
+tags: ["python", "parsing", "file-io", "strings"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 10
+benchmark_ready: true
+description: >
+  Implement a function parse_ini(text) that parses an INI-format configuration
+  string and returns a nested dictionary. Sections are denoted by [section_name]
+  and contain key=value pairs. Keys and values should be stripped of whitespace.
+  Lines starting with ; or # are comments and should be ignored. Empty lines
+  should be skipped. Keys outside any section go under the key "__global__".
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  def parse_ini(text):
+      result = {}
+      for line in text.strip().splitlines():
+          line = line.strip()
+          if line.startswith("["):
+              section = line[1:-1]
+              result[section] = {}
+          elif "=" in line:
+              k, v = line.split("=")
+              result[section][k] = v  # bug: no strip, no global section, no comment handling
+      return result

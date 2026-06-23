@@ -1,0 +1,34 @@
+id: rest-api-parser
+title: HTTP request parser
+language: python
+difficulty: medium
+suite: core
+capability: backend_logic
+tags: ["python", "http", "parsing", "backend", "protocol"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 20
+benchmark_ready: true
+description: >
+  Implement a function parse_http_request(raw_request) that takes a raw
+  HTTP request string and returns a dictionary with keys: method (str),
+  path (str), version (str, e.g. "HTTP/1.1"), headers (dict mapping
+  header names to values, case-insensitive keys normalized to lowercase),
+  query_params (dict parsed from the URL query string, empty dict if none),
+  and body (str, the request body after the blank line, or empty string).
+  Raise ValueError for malformed requests (missing request line, invalid
+  method, etc.).
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  def parse_http_request(raw_request):
+      lines = raw_request.split("\n")
+      method, path, version = lines[0].split(" ")
+      headers = {}
+      for line in lines[1:]:
+          if ":" in line:
+              k, v = line.split(":")
+              headers[k] = v
+      # bug: no query params, no body, no case normalization, no validation
+      return {"method": method, "path": path, "version": version, "headers": headers}

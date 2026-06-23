@@ -19,6 +19,7 @@ from sandbox.rules import Severity, Flag
 from analysis import trace_log, patch_apply
 from scoring import registry as task_registry
 from scoring import score as scorer
+from scoring.schema import RunManifest, ScoreBreakdown, RepairResult, SecurityFlag
 
 # Initialize logging as required
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -758,6 +759,63 @@ def handle(job: dict) -> None:
         # Write exact JSON contract back to Redis
         r.set(f"sandbench:run:{run_id}", json.dumps(result))
         logger.info("Job %s completed with status %s and verdict %s", run_id, result["status"], result["verdict"])
+
+        # Build and store RunManifest for structured audit trail
+        try:
+            task_id = job.get("taskId") or ""
+            task = task_registry.get_task(task_id)
+            manifest_flags = []
+            for f in flags:
+                manifest_flags.append(SecurityFlag(
+                    rule_id=f.rule_id,
+                    source=f.source,
+                    location=f.location,
+                    severity=f.severity.value.lower() if hasattr(f.severity, 'value') else str(f.severity),
+                    detail=f.evidence if hasattr(f, 'evidence') else "",
+                ))
+
+            manifest_repair = None
+            if repair_data:
+                manifest_repair = RepairResult(
+                    attempted=repair_data.get("attempted", False),
+                    applied=repair_data.get("applied", False),
+                    method=repair_data.get("method", "none"),
+                    score_before=repair_data.get("score_before"),
+                    score_after=repair_data.get("score_after"),
+                    reward=repair_data.get("reward"),
+                )
+
+            manifest_breakdown = None
+            if score_res:
+                manifest_breakdown = ScoreBreakdown(
+                    passed=score_res.get("passed", 0),
+                    total=score_res.get("total", 0),
+                    score=score_res.get("score", 0.0),
+                    raw_output=score_res.get("raw_output", "")[:2000],
+                )
+
+            manifest = RunManifest(
+                run_id=run_id,
+                task_id=task_id,
+                task_version=task.version if task else "0.1.0",
+                suite=task.suite if task else "core",
+                language=language,
+                status=result.get("status", "done"),
+                verdict=result.get("verdict"),
+                score=result.get("score"),
+                score_breakdown=manifest_breakdown,
+                flags=manifest_flags,
+                duration_ms=result.get("duration_ms", 0),
+                finished_at=result.get("finished_at"),
+                repair=manifest_repair,
+                user_id=job.get("userId"),
+                user_name=job.get("userName"),
+                submission_type=job.get("type", "code"),
+            )
+            r.set(f"sandbench:manifest:{run_id}", json.dumps(manifest.to_redis_dict()))
+            logger.info("RunManifest stored for %s", run_id)
+        except Exception as manifest_err:
+            logger.warning("Failed to store RunManifest for %s: %s", run_id, manifest_err)
 
         # Write leaderboard entry for scored clean runs
         if result.get("verdict") in ("clean", "suspicious") and isinstance(result.get("score"), (int, float)):

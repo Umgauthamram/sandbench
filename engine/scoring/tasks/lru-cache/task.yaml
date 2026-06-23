@@ -1,0 +1,34 @@
+id: lru-cache
+title: LRU cache implementation
+language: python
+difficulty: medium
+suite: core
+capability: stateful_system_design
+tags: ["python", "data-structures", "cache", "hash-map"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 20
+benchmark_ready: true
+description: >
+  Implement an LRUCache class with a fixed capacity. The constructor takes
+  capacity (int). get(key) returns the value if present (and marks it as
+  recently used), or -1 if not found. put(key, value) inserts or updates
+  a key-value pair. When the cache exceeds capacity, evict the least
+  recently used item before inserting the new one. Both get and put must
+  run in O(1) average time.
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  class LRUCache:
+      def __init__(self, capacity):
+          self.capacity = capacity
+          self.cache = {}
+
+      def get(self, key):
+          return self.cache.get(key, -1)  # bug: doesn't update recency
+
+      def put(self, key, value):
+          self.cache[key] = value
+          if len(self.cache) > self.capacity:
+              del self.cache[list(self.cache.keys())[0]]  # bug: not LRU order

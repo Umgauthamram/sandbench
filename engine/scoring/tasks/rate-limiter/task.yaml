@@ -8,7 +8,7 @@ tags: ["python", "state", "time", "backend"]
 source: sandbench
 version: 0.1.0
 human_baseline_minutes: 25
-benchmark_ready: false
+benchmark_ready: true
 description: >
   Implement TokenBucketRateLimiter(capacity, refill_rate). allow(key, now=None)
   should return True when a request for key is allowed and False when the

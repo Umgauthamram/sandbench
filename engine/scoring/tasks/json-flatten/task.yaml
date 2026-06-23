@@ -8,7 +8,7 @@ tags: ["python", "recursion", "data-structures"]
 source: sandbench
 version: 0.1.0
 human_baseline_minutes: 15
-benchmark_ready: false
+benchmark_ready: true
 description: >
   Implement flatten(obj) that collapses a nested dict into dot-delimited keys.
   For example, {"a": {"b": 1}} becomes {"a.b": 1}. Lists should be flattened

@@ -1,0 +1,33 @@
+id: jwt-validator
+title: JWT token validator
+language: python
+difficulty: medium
+suite: core
+capability: security_auth
+tags: ["python", "security", "jwt", "authentication", "base64"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 25
+benchmark_ready: true
+description: >
+  Implement a function validate_jwt(token, secret) that validates a JWT
+  (JSON Web Token) using HMAC-SHA256. The function should: (1) Split the
+  token into header, payload, and signature parts. (2) Verify the header
+  specifies alg=HS256 and typ=JWT. (3) Recompute the HMAC-SHA256 signature
+  using the secret and compare it to the provided signature. (4) Decode and
+  return the payload as a dict if valid. (5) Check that the token has not
+  expired by comparing the "exp" claim (Unix timestamp) to the current time.
+  Raise ValueError on any validation failure with a descriptive message.
+  Use only the standard library (base64, hmac, hashlib, json, time).
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  import base64, json
+
+  def validate_jwt(token, secret):
+      parts = token.split(".")
+      header = json.loads(base64.b64decode(parts[0]))
+      payload = json.loads(base64.b64decode(parts[1]))
+      # bug: no signature verification, no expiry check, no algorithm check
+      return payload

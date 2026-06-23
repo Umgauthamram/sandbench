@@ -1,0 +1,30 @@
+id: csv-pipeline
+title: CSV data transformation pipeline
+language: python
+difficulty: medium
+suite: core
+capability: data_transformation
+tags: ["python", "csv", "data-processing", "aggregation"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 20
+benchmark_ready: true
+description: >
+  Implement a function transform_csv(csv_text) that takes a CSV string with
+  headers and returns a summary dictionary. The CSV has columns: name, department,
+  salary. The function should return {"departments": {dept_name: {"count": N,
+  "total_salary": S, "avg_salary": A, "employees": [names]}}, "total_employees": N,
+  "highest_paid": {"name": str, "salary": float}}. Salary values are floats.
+  Handle edge cases: empty input, single row, duplicate names.
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  def transform_csv(csv_text):
+      lines = csv_text.strip().split("\n")
+      result = {"departments": {}, "total_employees": 0}
+      for line in lines[1:]:
+          name, dept, salary = line.split(",")
+          result["departments"][dept] = {"count": 1, "total_salary": float(salary)}
+          # bug: overwrites instead of aggregating, missing avg_salary, employees, highest_paid
+      return result

@@ -3,12 +3,19 @@
 Scans engine/scoring/tasks/*/task.yaml at module load time and exposes
 a cached dictionary of Task objects keyed by task id.
 """
+import hashlib
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
+
+from scoring.schema import (
+    TaskDefinition,
+    validate_benchmark_readiness,
+    BenchmarkReadinessError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +46,7 @@ class Task:
     human_baseline_minutes: Optional[int] = None
     hidden_test_files: int = 0
     benchmark_ready: bool = False
+    reference_solution_hash: Optional[str] = None
 
 
 def _as_string_list(value: Any, field_name: str, yaml_path: Path) -> List[str]:
@@ -68,6 +76,7 @@ def _count_hidden_test_files(tests_dir: Path) -> int:
 
 
 def _validate_task_data(data: Dict[str, Any], yaml_path: Path) -> None:
+    """Validate task data using both legacy checks and Pydantic schema."""
     required = {
         "id",
         "title",
@@ -100,6 +109,21 @@ def _validate_task_data(data: Dict[str, Any], yaml_path: Path) -> None:
     if not any("/workspace/tests" in arg for arg in test_command):
         raise ValueError(f"{yaml_path}: test_command must target /workspace/tests")
 
+    # Pydantic schema validation (catches additional constraints)
+    try:
+        TaskDefinition(**data)
+    except Exception as pydantic_err:
+        raise ValueError(f"{yaml_path}: schema validation failed: {pydantic_err}")
+
+
+def _compute_reference_hash(task_dir: Path) -> Optional[str]:
+    """Compute SHA-256 hash of the reference solution if present."""
+    ref_path = task_dir / "reference.py"
+    if not ref_path.is_file():
+        return None
+    content = ref_path.read_text(encoding="utf-8")
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
 
 def _scan_tasks() -> Dict[str, Task]:
     """Walk TASKS_DIR and parse every task.yaml into a Task."""
@@ -120,6 +144,10 @@ def _scan_tasks() -> Dict[str, Task]:
             _validate_task_data(data, yaml_path)
 
             tests_dir = entry / "tests"
+            hidden_test_count = _count_hidden_test_files(tests_dir)
+            ref_hash = _compute_reference_hash(entry)
+            has_reference = ref_hash is not None
+
             task = Task(
                 id=data["id"],
                 title=data["title"],
@@ -141,13 +169,24 @@ def _scan_tasks() -> Dict[str, Task]:
                     "human_baseline_minutes",
                     yaml_path,
                 ),
-                hidden_test_files=_count_hidden_test_files(tests_dir),
+                hidden_test_files=hidden_test_count,
                 benchmark_ready=bool(data.get("benchmark_ready", False)),
+                reference_solution_hash=ref_hash,
             )
+
+            # Enforce benchmark-readiness gate
+            if task.benchmark_ready:
+                task_def = TaskDefinition(**data)
+                reasons = validate_benchmark_readiness(
+                    task_def, hidden_test_count, has_reference
+                )
+                if reasons:
+                    raise BenchmarkReadinessError(task.id, reasons)
+
             if task.id in registry:
                 raise ValueError(f"{yaml_path}: duplicate task id {task.id!r}")
             registry[task.id] = task
-            logger.info("Loaded task: %s (%s)", task.id, task.title)
+            logger.info("Loaded task: %s (%s) [benchmark_ready=%s]", task.id, task.title, task.benchmark_ready)
         except Exception as exc:
             logger.exception("Failed to load task from %s: %s", yaml_path, exc)
 
@@ -197,7 +236,58 @@ def get_task(task_id: str) -> Optional[Task]:
     return _registry.get(task_id)
 
 
+def get_benchmark_ready_tasks() -> Dict[str, Task]:
+    """Return only tasks that pass benchmark-readiness checks."""
+    return {tid: t for tid, t in _registry.items() if t.benchmark_ready}
+
+
+def validate_all(strict: bool = False) -> List[str]:
+    """Validate all loaded tasks and return a list of issues.
+
+    In strict mode, tasks marked benchmark_ready must pass all readiness
+    checks. Non-strict mode only checks that tasks load successfully.
+    """
+    issues: List[str] = []
+    for task in _registry.values():
+        if not task.suite:
+            issues.append(f"{task.id}: missing suite")
+        if not task.tags:
+            issues.append(f"{task.id}: missing tags")
+        if task.hidden_test_files == 0:
+            issues.append(f"{task.id}: no hidden test files found")
+        if strict and task.benchmark_ready:
+            if task.reference_solution_hash is None:
+                issues.append(f"{task.id}: benchmark_ready but no reference solution")
+            if task.human_baseline_minutes is None:
+                issues.append(f"{task.id}: benchmark_ready but no human_baseline_minutes")
+    return issues
+
+
 def reload() -> None:
     """Re-scan the tasks directory. Useful during development."""
     global _registry
     _registry = _scan_tasks()
+
+
+if __name__ == "__main__":
+    import sys
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Validate SandBench benchmark tasks.")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Enforce benchmark-readiness validation for marked tasks.",
+    )
+    args = parser.parse_args()
+
+    print(f"Scanning tasks in {TASKS_DIR}...")
+    issues = validate_all(strict=args.strict)
+    if issues:
+        print("\n[FAIL] Validation issues found:")
+        for issue in issues:
+            print(f"  - {issue}")
+        sys.exit(1)
+    else:
+        print("\n[SUCCESS] All tasks are valid!")
+        sys.exit(0)

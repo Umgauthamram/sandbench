@@ -6,6 +6,7 @@ import os
 import json
 import logging
 from config import TRACE_LOG_PATH
+from analysis.redaction import sanitize_trace
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +29,9 @@ def log_trace(trace: dict) -> None:
         if parent_dir and not os.path.exists(parent_dir):
             os.makedirs(parent_dir, exist_ok=True)
 
+        sanitized = sanitize_trace(trace)
         with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(trace) + "\n")
+            f.write(json.dumps(sanitized) + "\n")
             f.flush()
     except Exception as e:
         logger.exception("Failed to log training trace: %s", e)
