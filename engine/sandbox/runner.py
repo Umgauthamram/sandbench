@@ -124,12 +124,37 @@ def cleanup_orphans(docker_client: docker.DockerClient) -> None:
         logger.error("Error during orphan cleanup: %s", e)
 
 
+def _parse_mem_to_bytes(mem_str: str) -> int:
+    import re
+    match = re.match(r"^(\d+)([bkmg])$", mem_str.lower())
+    if not match:
+        return 256 * 1024 * 1024  # default fallback
+    val, unit = int(match.group(1)), match.group(2)
+    if unit == 'k':
+        return val * 1024
+    if unit == 'm':
+        return val * 1024 * 1024
+    if unit == 'g':
+        return val * 1024 * 1024 * 1024
+    return val
+
+def _clamp_mem(override: str, ceiling: str = "1024m") -> str:
+    override_bytes = _parse_mem_to_bytes(override)
+    ceiling_bytes = _parse_mem_to_bytes(ceiling)
+    if override_bytes > ceiling_bytes:
+        return ceiling
+    return override
+
+
 def run(
     code: str,
     language: str = "python",
     image: Optional[str] = None,
     extra_files: Optional[Dict[str, str]] = None,
     command: Optional[List[str]] = None,
+    timeout_seconds: Optional[int] = None,
+    mem_limit: Optional[str] = None,
+    cpus: Optional[float] = None,
 ) -> RunResult:
     """Run code inside a hardened, throwaway container and return a RunResult.
 
@@ -142,6 +167,9 @@ def run(
             absolute container paths like "/workspace/tests/test_solution.py".
         command: Optional command override. If None, uses the default
             language-specific run command.
+        timeout_seconds: Optional timeout override in seconds (clamped to [1, 60]).
+        mem_limit: Optional memory limit override (clamped to max 1024m).
+        cpus: Optional cpu cores limit override (clamped to [0.1, 2.0]).
     """
     container = None
     timed_out = False
@@ -162,6 +190,19 @@ def run(
         else ["python", f"/workspace/{file_name}"]
     )
 
+    # Apply and clamp resource limits
+    timeout_val = SANDBOX_TIMEOUT_SECONDS
+    if timeout_seconds is not None:
+        timeout_val = min(max(1, timeout_seconds), 60)
+
+    mem_val = SANDBOX_MEM_LIMIT
+    if mem_limit is not None:
+        mem_val = _clamp_mem(mem_limit, "1024m")
+
+    cpus_val = SANDBOX_CPUS
+    if cpus is not None:
+        cpus_val = min(max(0.1, cpus), 2.0)
+
     start_time = time.perf_counter()
     try:
         docker_client = _get_client()
@@ -178,8 +219,8 @@ def run(
                 user="65534:65534",  # nobody
                 cap_drop=["ALL"],
                 security_opt=_load_security_opt(),
-                mem_limit=SANDBOX_MEM_LIMIT,
-                nano_cpus=int(SANDBOX_CPUS * 1e9),
+                mem_limit=mem_val,
+                nano_cpus=int(cpus_val * 1e9),
                 pids_limit=SANDBOX_PIDS_LIMIT,
                 labels={"sandbench": "1"},
             )
@@ -198,8 +239,8 @@ def run(
                 user="65534:65534",  # nobody
                 cap_drop=["ALL"],
                 security_opt=_load_security_opt(),
-                mem_limit=SANDBOX_MEM_LIMIT,
-                nano_cpus=int(SANDBOX_CPUS * 1e9),
+                mem_limit=mem_val,
+                nano_cpus=int(cpus_val * 1e9),
                 pids_limit=SANDBOX_PIDS_LIMIT,
                 labels={"sandbench": "1"},
             )
@@ -237,7 +278,7 @@ def run(
 
         # 4. Wait with a wall-clock timeout.
         try:
-            res = container.wait(timeout=SANDBOX_TIMEOUT_SECONDS)
+            res = container.wait(timeout=timeout_val)
             exit_code = res.get("StatusCode", -1)
         except (requests.exceptions.ReadTimeout, requests.exceptions.ConnectionError):
             timed_out = True

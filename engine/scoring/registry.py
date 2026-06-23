@@ -15,6 +15,7 @@ from scoring.schema import (
     TaskDefinition,
     validate_benchmark_readiness,
     BenchmarkReadinessError,
+    ResourceOverrides,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ class Task:
     hidden_test_files: int = 0
     benchmark_ready: bool = False
     reference_solution_hash: Optional[str] = None
+    resource_overrides: Optional[ResourceOverrides] = None
 
 
 def _as_string_list(value: Any, field_name: str, yaml_path: Path) -> List[str]:
@@ -172,6 +174,7 @@ def _scan_tasks() -> Dict[str, Task]:
                 hidden_test_files=hidden_test_count,
                 benchmark_ready=bool(data.get("benchmark_ready", False)),
                 reference_solution_hash=ref_hash,
+                resource_overrides=ResourceOverrides(**data["resource_overrides"]) if "resource_overrides" in data and data["resource_overrides"] else None,
             )
 
             # Enforce benchmark-readiness gate
@@ -223,6 +226,7 @@ def public_task(task: Task) -> Dict[str, Any]:
         "human_baseline_minutes": task.human_baseline_minutes,
         "hidden_test_files": task.hidden_test_files,
         "benchmark_ready": task.benchmark_ready,
+        "resource_overrides": task.resource_overrides.model_dump() if task.resource_overrides else None,
     }
 
 

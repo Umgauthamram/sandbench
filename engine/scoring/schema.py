@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +58,43 @@ class Verdict(str, Enum):
 
 
 # ---------------------------------------------------------------------------
+# Resource Overrides
+# ---------------------------------------------------------------------------
+
+class ResourceOverrides(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    timeout_seconds: Optional[int] = Field(default=None, ge=1, le=60)
+    mem_limit: Optional[str] = Field(default=None)
+    cpus: Optional[float] = Field(default=None, ge=0.1, le=2.0)
+
+    @field_validator("mem_limit")
+    @classmethod
+    def validate_mem_limit(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        import re
+        match = re.match(r"^(\d+)([bkmg])$", v.lower())
+        if not match:
+            raise ValueError("mem_limit must be a number followed by b, k, m, or g")
+        
+        # Enforce max 1024m (1GB) limit
+        value, unit = int(match.group(1)), match.group(2)
+        bytes_limit = value
+        if unit == 'k':
+            bytes_limit *= 1024
+        elif unit == 'm':
+            bytes_limit *= 1024 * 1024
+        elif unit == 'g':
+            bytes_limit *= 1024 * 1024 * 1024
+        
+        if bytes_limit > 1024 * 1024 * 1024:
+            raise ValueError("mem_limit exceeds maximum allowed ceiling of 1GB")
+        
+        return v
+
+
+# ---------------------------------------------------------------------------
 # Task Definition
 # ---------------------------------------------------------------------------
 
@@ -67,6 +104,8 @@ class TaskDefinition(BaseModel):
     Every task.yaml in the registry MUST validate against this model.
     Fields marked as required will cause a validation error if missing.
     """
+    model_config = ConfigDict(use_enum_values=True)
+
     id: str = Field(..., min_length=1, description="Unique task identifier (kebab-case)")
     title: str = Field(..., min_length=1, description="Human-readable task title")
     language: Language
@@ -94,8 +133,7 @@ class TaskDefinition(BaseModel):
         description="SHA-256 hash of the reference solution file for integrity verification"
     )
 
-    class Config:
-        use_enum_values = True
+    resource_overrides: Optional[ResourceOverrides] = Field(default=None)
 
     @field_validator("id")
     @classmethod

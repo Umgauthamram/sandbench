@@ -64,137 +64,47 @@ def review_code(code: str, error_output: Optional[str] = None, score_info: Optio
         "}"
     )
 
+    from adapters.registry import create_adapter
+
     if LLM_PROVIDER.lower() == "local":
-        return _call_local_provider(prompt)
+        adapter = create_adapter(
+            provider="local",
+            api_key="local-key",
+            model_name="fine-tuned-coder",
+            endpoint=MODEL_ENDPOINT_URL
+        )
     else:
-        # Default is Gemini
-        return _call_gemini_provider(prompt)
+        adapter = create_adapter(
+            provider="gemini",
+            api_key=GEMINI_API_KEY,
+            model_name="gemini-2.5-flash"
+        )
 
+    res = adapter.generate(
+        prompt=prompt,
+        response_format={"type": "json_object"},
+        timeout_s=30
+    )
 
-def _call_gemini_provider(prompt: str) -> Dict[str, Any]:
-    """Call the hosted Google Gemini API directly using requests."""
-    if not GEMINI_API_KEY:
-        logger.error("GEMINI_API_KEY environment variable is not set")
+    if not res.ok:
         return {
             "ok": False,
-            "review_text": "Error: Gemini API key is missing. Cannot perform code review.",
+            "review_text": res.error or "Error calling model API",
             "patch": ""
         }
-
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
-    }
-    
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": prompt
-                    }
-                ]
-            }
-        ],
-        "generationConfig": {
-            "responseMimeType": "application/json"
-        }
-    }
 
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        res_json = response.json()
-        
-        # Extract response text from Gemini format
-        candidates = res_json.get("candidates", [])
-        if not candidates:
-            return {"ok": False, "review_text": "Error: No review candidates returned from Gemini API.", "patch": ""}
-            
-        content_parts = candidates[0].get("content", {}).get("parts", [])
-        if not content_parts:
-            return {"ok": False, "review_text": "Error: Empty content parts returned from Gemini API.", "patch": ""}
-            
-        text = content_parts[0].get("text", "")
-        
-        # Parse the structured JSON response
-        try:
-            parsed = json.loads(text)
-            parsed["ok"] = True
-            return parsed
-        except json.JSONDecodeError:
-            # Fallback if model did not return valid JSON despite configuration
-            return {
-                "ok": True,
-                "review_text": text,
-                "patch": ""
-            }
-
-    except Exception as e:
-        logger.exception("Gemini API call failed: %s", e)
+        parsed = json.loads(res.content)
+        parsed["ok"] = True
+        # Ensure review_text and patch are present
+        if "review_text" not in parsed:
+            parsed["review_text"] = res.content
+        if "patch" not in parsed:
+            parsed["patch"] = ""
+        return parsed
+    except json.JSONDecodeError:
         return {
-            "ok": False,
-            "review_text": f"Error calling Gemini API: {type(e).__name__}",
-            "patch": ""
-        }
-
-
-def _call_local_provider(prompt: str) -> Dict[str, Any]:
-    """Call the OpenAI-compatible local model completions endpoint (e.g. llama.cpp or Ollama)."""
-    if not MODEL_ENDPOINT_URL:
-        logger.error("MODEL_ENDPOINT_URL environment variable is not set for local provider")
-        return {
-            "ok": False,
-            "review_text": "Error: Local model endpoint URL is missing. Cannot perform code review.",
-            "patch": ""
-        }
-
-    # Normalize endpoint URL to ensure OpenAI-compatible completions endpoint
-    base_url = MODEL_ENDPOINT_URL.rstrip("/")
-    url = f"{base_url}/v1/chat/completions"
-    headers = {"Content-Type": "application/json"}
-
-    payload = {
-        "model": "fine-tuned-coder",  # Placeholder identifier for fine-tuned coder
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        "temperature": 0.2,
-        "response_format": {"type": "json_object"}
-    }
-
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        res_json = response.json()
-
-        # Extract OpenAI compatible completions format
-        choices = res_json.get("choices", [])
-        if not choices:
-            return {"ok": False, "review_text": "Error: No completions returned from local model endpoint.", "patch": ""}
-
-        content = choices[0].get("message", {}).get("content", "")
-        
-        # Parse the structured JSON response
-        try:
-            parsed = json.loads(content)
-            parsed["ok"] = True
-            return parsed
-        except json.JSONDecodeError:
-            return {
-                "ok": True,
-                "review_text": content,
-                "patch": ""
-            }
-
-    except Exception as e:
-        logger.exception("Local model endpoint API call failed: %s", e)
-        return {
-            "ok": False,
-            "review_text": f"Error calling local model endpoint: {type(e).__name__}",
+            "ok": True,
+            "review_text": res.content,
             "patch": ""
         }

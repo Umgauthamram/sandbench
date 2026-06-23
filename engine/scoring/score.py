@@ -146,6 +146,15 @@ def score_submission(
         # Remove --tb=no to ensure traceback is printed for the security monitor
         run_cmd = [arg for arg in task.test_command if not arg.startswith("--tb=")]
 
+        # Retrieve resource overrides from task if present
+        timeout_override = None
+        mem_override = None
+        cpus_override = None
+        if getattr(task, "resource_overrides", None):
+            timeout_override = task.resource_overrides.timeout_seconds
+            mem_override = task.resource_overrides.mem_limit
+            cpus_override = task.resource_overrides.cpus
+
         # Run the test suite inside a fresh hardened sandbox
         run_res = runner.run(
             code,
@@ -153,6 +162,9 @@ def score_submission(
             image=image,
             extra_files=extra_files,
             command=run_cmd,
+            timeout_seconds=timeout_override,
+            mem_limit=mem_override,
+            cpus=cpus_override,
         )
 
         # Combine stdout + stderr for parsing (pytest may write to either)

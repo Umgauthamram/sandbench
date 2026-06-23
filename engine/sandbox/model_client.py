@@ -38,74 +38,16 @@ def call_user_model(
     Performs an SSRF check BEFORE any network activity; on rejection makes no
     request at all.
     """
-    # 1. SSRF guard & DNS resolution — resolved on host to prevent obvious SSRF cases.
-    hostname, validated_ips, reason = ssrf_guard.resolve_safe(endpoint)
-    if not hostname or not validated_ips:
-        return (False, f"endpoint rejected: {reason}")
-
-    # 2. Normalize to an OpenAI-compatible completions URL.
-    base = endpoint.rstrip("/")
-    if base.endswith("/chat/completions"):
-        url = base
-    elif base.endswith("/openai"):
-        url = base + "/chat/completions"
-    elif base.endswith("/v1"):
-        url = base + "/chat/completions"
+    from adapters.openai_compat import OpenAICompatAdapter
+    adapter = OpenAICompatAdapter(name=model_name, api_key=api_key, endpoint=endpoint)
+    res = adapter.generate(
+        prompt=prompt,
+        timeout_s=timeout_s,
+        max_response_bytes=max_response_bytes,
+        temperature=0.2,
+        response_format={"type": "json_object"}
+    )
+    if res.ok:
+        return (True, res.content)
     else:
-        url = base + "/v1/chat/completions"
-
-    headers = {
-        "Authorization": "Bearer " + api_key,
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": model_name,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2,
-        "response_format": {"type": "json_object"},
-    }
-
-    # 3. Dispatches the request via standard Session to support CDN-fronted hosts
-    session = requests.Session()
-
-    try:
-        response = session.post(
-            url,
-            headers=headers,
-            json=payload,
-            timeout=timeout_s,
-            allow_redirects=False,
-            stream=True,  # Stream content to enforce limit before reading all into memory
-        )
-
-        # Do not follow redirects — they could point at an internal address.
-        if 300 <= response.status_code < 400:
-            return (False, "redirects not allowed")
-
-        response.raise_for_status()
-
-        # Cap the body we read/parse incrementally.
-        content_bytes = bytearray()
-        try:
-            for chunk in response.iter_content(chunk_size=8192):
-                content_bytes.extend(chunk)
-                if len(content_bytes) > max_response_bytes:
-                    response.close()
-                    return (False, "response too large")
-        finally:
-            response.close()
-
-        body = bytes(content_bytes)
-        data = json.loads(body)
-
-        choices = data.get("choices", [])
-        if not choices:
-            return (False, "model response had no choices")
-
-        content = choices[0].get("message", {}).get("content", "")
-        return (True, content)
-
-    except Exception as e:
-        # NEVER log the key, header, endpoint, or response body.
-        logger.error("user model call failed: %s", type(e).__name__)
-        return (False, f"error: {type(e).__name__}")
+        return (False, res.error or "error")
