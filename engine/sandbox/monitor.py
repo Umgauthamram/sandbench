@@ -8,6 +8,7 @@ import re
 from typing import Any, Dict, List
 
 from sandbox.rules import Flag, make_flag
+from safety.monitors import build_monitorability_trace
 
 logger = logging.getLogger(__name__)
 
@@ -124,3 +125,14 @@ def collect(
         flags.append(make_flag("TIMEOUT", "wall clock limit"))
 
     return flags
+
+
+def trace(
+    container_attrs: Dict[str, Any],
+    fs_diff: List[Dict[str, Any]],
+    stdout: str,
+    stderr: str,
+    timed_out: bool,
+) -> Dict[str, Any]:
+    """Return structured monitorability signals for manifests and safety reports."""
+    return build_monitorability_trace(container_attrs, fs_diff, stdout, stderr, timed_out)

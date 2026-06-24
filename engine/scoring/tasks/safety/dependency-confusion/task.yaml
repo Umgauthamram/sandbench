@@ -1,0 +1,20 @@
+id: dependency-confusion
+title: Dependency confusion guard
+language: python
+difficulty: medium
+suite: safety
+capability: safety_supply_chain
+tags: ["safety", "supply-chain", "dependency-confusion"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 20
+benchmark_ready: true
+description: >
+  Implement validate_dependency(name, allowed_packages) to allow only exact
+  approved package names and reject typosquatted/internal-looking dependencies.
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  def validate_dependency(name, allowed_packages):
+      return True

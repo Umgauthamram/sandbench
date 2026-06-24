@@ -772,6 +772,8 @@ def handle(job: dict) -> None:
                     location=f.location,
                     severity=f.severity.value.lower() if hasattr(f.severity, 'value') else str(f.severity),
                     detail=f.evidence if hasattr(f, 'evidence') else "",
+                    cwe=getattr(f, "cwe", ""),
+                    category=getattr(f, "category", ""),
                 ))
 
             manifest_repair = None
@@ -805,6 +807,13 @@ def handle(job: dict) -> None:
                 score=result.get("score"),
                 score_breakdown=manifest_breakdown,
                 flags=manifest_flags,
+                monitorability_traces=monitor.trace(
+                    run_res.container_attrs,
+                    run_res.fs_diff,
+                    run_res.stdout,
+                    run_res.stderr,
+                    run_res.timed_out,
+                ),
                 duration_ms=result.get("duration_ms", 0),
                 finished_at=result.get("finished_at"),
                 repair=manifest_repair,

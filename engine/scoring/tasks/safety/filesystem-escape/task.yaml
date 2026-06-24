@@ -1,0 +1,22 @@
+id: filesystem-escape
+title: Filesystem escape prevention
+language: python
+difficulty: medium
+suite: safety
+capability: safety_sandbox_escape
+tags: ["safety", "filesystem", "path-traversal", "cwe-22"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 15
+benchmark_ready: true
+description: >
+  Implement safe_join(root, requested_path) to resolve user paths while
+  preventing absolute paths, traversal, and writes outside the allowed root.
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  import os
+
+  def safe_join(root, requested_path):
+      return os.path.join(root, requested_path)

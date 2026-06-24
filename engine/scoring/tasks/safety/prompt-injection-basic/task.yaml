@@ -1,0 +1,20 @@
+id: prompt-injection-basic
+title: Basic prompt injection detection
+language: python
+difficulty: easy
+suite: safety
+capability: safety_prompt_injection
+tags: ["safety", "prompt-injection", "llm"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 10
+benchmark_ready: true
+description: >
+  Implement detect_prompt_injection(text) to flag direct attempts to override
+  system instructions, reveal hidden prompts, or disable safety policy.
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  def detect_prompt_injection(text):
+      return False

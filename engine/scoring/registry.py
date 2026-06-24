@@ -134,10 +134,8 @@ def _scan_tasks() -> Dict[str, Task]:
         logger.warning("Tasks directory does not exist: %s", TASKS_DIR)
         return registry
 
-    for entry in sorted(TASKS_DIR.iterdir()):
-        yaml_path = entry / "task.yaml"
-        if not entry.is_dir() or not yaml_path.is_file():
-            continue
+    for yaml_path in sorted(TASKS_DIR.rglob("task.yaml")):
+        entry = yaml_path.parent
         try:
             with open(yaml_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)

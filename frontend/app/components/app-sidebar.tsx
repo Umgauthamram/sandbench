@@ -11,6 +11,7 @@ import {
   Boxes,
   Bot,
   FlaskConical,
+  ShieldCheck,
   Settings,
   LogOut
 } from "lucide-react";
@@ -21,6 +22,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/tasks", label: "Benchmark tasks", icon: Boxes },
       { href: "/rl-eval", label: "RL Environment", icon: FlaskConical },
+  { href: "/safety", label: "Safety suite", icon: ShieldCheck },
   // { href: "/submit", label: "New submission", icon: Plus },
   { href: "/runs", label: "Logs", icon: ListChecks },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
@@ -98,4 +100,3 @@ export function AppSidebar({ user }: { user?: SafeUser | null }) {
     </aside>
   );
 }
-

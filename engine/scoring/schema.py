@@ -238,6 +238,8 @@ class SecurityFlag(BaseModel):
     location: Optional[str] = None
     severity: str = "medium"
     detail: str = ""
+    cwe: str = ""
+    category: str = ""
 
 
 class RunManifest(BaseModel):
@@ -269,6 +271,10 @@ class RunManifest(BaseModel):
     score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     score_breakdown: Optional[ScoreBreakdown] = None
     flags: List[SecurityFlag] = Field(default_factory=list)
+    monitorability_traces: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured runtime signals such as network, filesystem, and resource events",
+    )
 
     # Timing
     queued_at: Optional[str] = None

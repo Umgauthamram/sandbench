@@ -9,9 +9,11 @@ from typing import Dict, Tuple
 
 
 class Severity(str, Enum):
+    CRITICAL = "CRITICAL"
     HIGH = "HIGH"      # any HIGH flag => verdict MALICIOUS
     MEDIUM = "MEDIUM"  # recorded, does not flip verdict
     LOW = "LOW"
+    INFO = "INFO"
 
 
 @dataclass
@@ -21,16 +23,23 @@ class Flag:
     source: str        # "static" | "monitor"
     evidence: str      # the actual matched string / path / address
     location: str = "" # file:line where applicable
+    cwe: str = ""
+    category: str = ""
 
     def to_dict(self) -> dict:
         """Serialize Flag to a dictionary matching the JSON contract."""
-        return {
+        data = {
             "rule_id": self.rule_id,
             "severity": self.severity.value,
             "source": self.source,
             "evidence": self.evidence,
             "location": self.location,
         }
+        if self.cwe:
+            data["cwe"] = self.cwe
+        if self.category:
+            data["category"] = self.category
+        return data
 
 
 RULES: Dict[str, Tuple[str, Severity, str]] = {
@@ -45,6 +54,36 @@ RULES: Dict[str, Tuple[str, Severity, str]] = {
     "OBFUSCATION":        ("static",  Severity.MEDIUM, "Obfuscated code (exec/eval on encoded data)"),
     "TIMEOUT":            ("monitor", Severity.LOW,    "Wall-clock timeout exceeded"),
     "DISK_EXHAUSTION":    ("monitor", Severity.HIGH,   "Disk space exhausted (file system full error)"),
+}
+
+
+RULE_CWE: Dict[str, str] = {
+    "NET_EGRESS_ATTEMPT": "CWE-918",
+    "FS_WRITE_OUTSIDE": "CWE-22",
+    "FORK_BOMB": "CWE-400",
+    "OOM_KILL": "CWE-400",
+    "YARA_MATCH": "CWE-506",
+    "BANDIT_HIGH": "CWE-693",
+    "BANDIT_MEDIUM": "CWE-693",
+    "SEMGREP_SECURITY": "CWE-693",
+    "OBFUSCATION": "CWE-506",
+    "TIMEOUT": "CWE-400",
+    "DISK_EXHAUSTION": "CWE-400",
+}
+
+
+RULE_CATEGORY: Dict[str, str] = {
+    "NET_EGRESS_ATTEMPT": "network",
+    "FS_WRITE_OUTSIDE": "filesystem",
+    "FORK_BOMB": "process",
+    "OOM_KILL": "resource",
+    "YARA_MATCH": "malware",
+    "BANDIT_HIGH": "static-analysis",
+    "BANDIT_MEDIUM": "static-analysis",
+    "SEMGREP_SECURITY": "static-analysis",
+    "OBFUSCATION": "evasion",
+    "TIMEOUT": "resource",
+    "DISK_EXHAUSTION": "resource",
 }
 
 
@@ -65,5 +104,7 @@ def make_flag(rule_id: str, evidence: str, location: str = "") -> Flag:
         severity=severity,
         source=source,
         evidence=evidence[:500],
-        location=location
+        location=location,
+        cwe=RULE_CWE.get(rule_id, ""),
+        category=RULE_CATEGORY.get(rule_id, ""),
     )

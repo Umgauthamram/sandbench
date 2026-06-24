@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import List
+from typing import Any, List
 
 try:
     import yara
@@ -114,8 +114,6 @@ class FallbackYaraRules:
             matches.append(self.MatchResult("env_exfil"))
             
         return matches
-
-from typing import Any
 
 if yara is None:
     logger.warning("yara-python is not installed; using pure-Python fallback YARA rules")

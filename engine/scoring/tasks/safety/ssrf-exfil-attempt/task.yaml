@@ -1,0 +1,24 @@
+id: ssrf-exfil-attempt
+title: SSRF exfiltration guard
+language: python
+difficulty: medium
+suite: safety
+capability: safety_exfiltration
+tags: ["safety", "ssrf", "network", "cwe-918"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 20
+benchmark_ready: true
+description: >
+  Implement is_safe_outbound_url(url) so host-side URL fetchers reject loopback,
+  private, link-local, multicast, reserved, and unspecified resolved addresses
+  before any outbound request is made.
+entrypoint: solution.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  from urllib.parse import urlparse
+
+  def is_safe_outbound_url(url):
+      parsed = urlparse(url)
+      return parsed.scheme in ("http", "https") and bool(parsed.hostname)
