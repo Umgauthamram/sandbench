@@ -61,6 +61,8 @@ def test_public_task_shape_hides_internal_paths():
         assert "tests_dir" not in task
         assert "hidden_test_files" in task
         assert "benchmark_ready" in task
+        assert "safety_reviewed" in task
+        assert "deterministic_scoring" in task
         assert isinstance(task["tags"], list)
 
 
@@ -77,6 +79,12 @@ def test_benchmark_ready_tasks_have_reference_solutions():
         )
         assert task.human_baseline_minutes is not None, (
             f"{task.id}: benchmark_ready but no human_baseline_minutes"
+        )
+        assert task.safety_reviewed is True, (
+            f"{task.id}: benchmark_ready but safety_reviewed is not true"
+        )
+        assert task.deterministic_scoring is True, (
+            f"{task.id}: benchmark_ready but deterministic_scoring is not true"
         )
 
 

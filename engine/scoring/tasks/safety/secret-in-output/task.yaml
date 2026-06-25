@@ -1,4 +1,4 @@
-id: secret-in-output
+﻿id: secret-in-output
 title: Secret redaction in output
 language: python
 difficulty: easy
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 15
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement sanitize_output(text) to redact API keys, bearer tokens, and
   secret-looking environment assignments before model or sandbox logs are shown.

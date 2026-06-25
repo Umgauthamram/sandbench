@@ -25,6 +25,14 @@ export interface SecurityFlag {
   rule: string;
   severity: Severity;
   detail: string;
+  cwe?: string;
+  category?: string;
+}
+
+export interface RunArtifact {
+  bundleHash: string;
+  manifestUrl?: string;
+  bundleUrl?: string;
 }
 
 export type SuggestionCategory =
@@ -68,6 +76,7 @@ export interface Run {
   suggestions: Suggestion[];
   logs: string[];
   repair?: RunRepair;
+  artifact?: RunArtifact;
   userId?: string;
   userName?: string;
 }
@@ -100,6 +109,8 @@ export interface BenchmarkTask {
   human_baseline_minutes?: number | null;
   hidden_test_files?: number;
   benchmark_ready?: boolean;
+  safety_reviewed?: boolean;
+  deterministic_scoring?: boolean;
 }
 
 export interface LeaderboardEntry {
@@ -112,6 +123,12 @@ export interface LeaderboardEntry {
   score: number;
   verdict: Verdict;
   createdAt: string;
+  runId?: string;
+  userId?: string;
+  suite?: string;
+  taskVersion?: string;
+  submissionHash?: string;
+  artifactBundleHash?: string;
 }
 
 export interface SSEMessage {

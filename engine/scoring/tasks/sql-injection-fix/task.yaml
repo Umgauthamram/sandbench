@@ -1,4 +1,4 @@
-id: sql-injection-fix
+﻿id: sql-injection-fix
 title: SQL injection sanitizer
 language: python
 difficulty: hard
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 30
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement a class SafeQueryBuilder that builds parameterized SQL queries
   safely. The constructor takes a table name (string). Methods: select(columns)

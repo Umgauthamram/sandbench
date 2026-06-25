@@ -24,6 +24,11 @@ const RUN_KEY = (id: string) => `run:${id}`;
 const RUNS_INDEX = "runs:index";
 const JOB_QUEUE = "sandbench:jobs";
 
+export interface LeaderboardQuery {
+  suite?: string;
+  version?: string;
+}
+
 // ── In-memory fallback (module-scoped; resets on server restart) ──
 const mem = {
   runs: new Map<string, Run>(RUNS.map((r) => [r.id, r])),
@@ -115,8 +120,55 @@ export async function createRun(input: SubmitInput): Promise<Run> {
   return run;
 }
 
-export async function listLeaderboard(): Promise<LeaderboardEntry[]> {
+export async function listLeaderboard(query: LeaderboardQuery = {}): Promise<LeaderboardEntry[]> {
   if (!redisConfigured) return LEADERBOARD;
+  if (query.suite && query.version) {
+    const scoreKey = `sandbench:lb:${query.suite}:${query.version}:scores`;
+    const members = await redis.zrevrange(scoreKey, 0, 99);
+    if (members?.length) {
+      const entries = await Promise.all(
+        members.map(async (member, index): Promise<LeaderboardEntry | null> => {
+          const raw = await redis.hget(`${scoreKey}:entries`, member);
+          if (!raw) return null;
+          const record = JSON.parse(raw) as {
+            user?: string;
+            user_id?: string;
+            submission_id?: string;
+            hash?: string;
+            run_id?: string;
+            suite?: string;
+            task_id?: string;
+            task_title?: string;
+            task_version?: string;
+            score?: number;
+            verdict?: LeaderboardEntry["verdict"];
+            created_at?: string;
+            artifact_bundle_hash?: string;
+          };
+          const entry: LeaderboardEntry = {
+            rank: index + 1,
+            user: record.user ?? "anon",
+            userId: record.user_id ?? "",
+            submissionId: record.submission_id ?? "",
+            submissionHash: record.hash ?? "",
+            runId: record.run_id ?? "",
+            taskId: record.task_id ?? "",
+            taskTitle: record.task_title ?? record.task_id ?? "",
+            score: record.score ?? 0,
+            verdict: record.verdict ?? "clean",
+            createdAt: record.created_at ?? "",
+            artifactBundleHash: record.artifact_bundle_hash ?? "",
+          };
+          const suite = record.suite ?? query.suite;
+          const taskVersion = record.task_version ?? query.version;
+          if (suite) entry.suite = suite;
+          if (taskVersion) entry.taskVersion = taskVersion;
+          return entry;
+        }),
+      );
+      return entries.filter((entry): entry is LeaderboardEntry => entry !== null);
+    }
+  }
   const raw = await redis.get("leaderboard");
   if (!raw) return [];
   const entries = JSON.parse(raw) as LeaderboardEntry[];

@@ -1,4 +1,4 @@
-id: lru-cache
+﻿id: lru-cache
 title: LRU cache implementation
 language: python
 difficulty: medium
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 20
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement an LRUCache class with a fixed capacity. The constructor takes
   capacity (int). get(key) returns the value if present (and marks it as

@@ -47,6 +47,8 @@ class Task:
     human_baseline_minutes: Optional[int] = None
     hidden_test_files: int = 0
     benchmark_ready: bool = False
+    safety_reviewed: bool = False
+    deterministic_scoring: bool = False
     reference_solution_hash: Optional[str] = None
     resource_overrides: Optional[ResourceOverrides] = None
 
@@ -171,6 +173,8 @@ def _scan_tasks() -> Dict[str, Task]:
                 ),
                 hidden_test_files=hidden_test_count,
                 benchmark_ready=bool(data.get("benchmark_ready", False)),
+                safety_reviewed=bool(data.get("safety_reviewed", False)),
+                deterministic_scoring=bool(data.get("deterministic_scoring", False)),
                 reference_solution_hash=ref_hash,
                 resource_overrides=ResourceOverrides(**data["resource_overrides"]) if "resource_overrides" in data and data["resource_overrides"] else None,
             )
@@ -224,6 +228,8 @@ def public_task(task: Task) -> Dict[str, Any]:
         "human_baseline_minutes": task.human_baseline_minutes,
         "hidden_test_files": task.hidden_test_files,
         "benchmark_ready": task.benchmark_ready,
+        "safety_reviewed": task.safety_reviewed,
+        "deterministic_scoring": task.deterministic_scoring,
         "resource_overrides": task.resource_overrides.model_dump() if task.resource_overrides else None,
     }
 
@@ -262,6 +268,10 @@ def validate_all(strict: bool = False) -> List[str]:
                 issues.append(f"{task.id}: benchmark_ready but no reference solution")
             if task.human_baseline_minutes is None:
                 issues.append(f"{task.id}: benchmark_ready but no human_baseline_minutes")
+            if not task.safety_reviewed:
+                issues.append(f"{task.id}: benchmark_ready but safety_reviewed is not true")
+            if not task.deterministic_scoring:
+                issues.append(f"{task.id}: benchmark_ready but deterministic_scoring is not true")
     return issues
 
 

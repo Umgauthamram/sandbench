@@ -17,6 +17,8 @@ from sandbox import runner, static_gate, monitor, review
 from sandbox.archive import extract_archive
 from sandbox.rules import Severity, Flag
 from analysis import trace_log, patch_apply
+from artifacts import create_artifact_bundle
+from leaderboard import upsert_versioned_leaderboard
 from scoring import registry as task_registry
 from scoring import score as scorer
 from scoring.schema import RunManifest, ScoreBreakdown, RepairResult, SecurityFlag
@@ -442,6 +444,10 @@ def handle(job: dict) -> None:
 
     try:
         flags = []
+        run_res = None
+        score_res = None
+        suggestions = []
+        repair_data = None
         with tempfile.TemporaryDirectory() as tmpdir:
             if user_files:
                 for file_path, file_content in user_files.items():
@@ -577,8 +583,6 @@ def handle(job: dict) -> None:
                 score = 0.0
 
             # E) Run analysis engine (WP3) for clean/broken runs
-            suggestions = []
-            repair_data = None
             if verdict in ("clean", "suspicious", "broken"):
                 try:
                     error_output = (run_res.stderr or "")[:4000]
@@ -716,10 +720,10 @@ def handle(job: dict) -> None:
                 "score": score,
                 "flags": [f.to_dict() for f in flags],
                 "suggestions": suggestions,
-                "stdout": run_res.stdout,
-                "stderr": run_res.stderr,
-                "duration_ms": run_res.duration_ms,
-                "exit_code": run_res.exit_code,
+                "stdout": run_res.stdout if run_res is not None else "",
+                "stderr": run_res.stderr if run_res is not None else "",
+                "duration_ms": run_res.duration_ms if run_res is not None else 0,
+                "exit_code": run_res.exit_code if run_res is not None else -1,
                 "finished_at": datetime.now(timezone.utc).isoformat() + "Z"
             }
             if repair_data:
@@ -744,11 +748,12 @@ def handle(job: dict) -> None:
                 run_data["suggestions"] = suggestions
                 if repair_data:
                     run_data["repair"] = repair_data
-                run_data["logs"].append(f"[worker] container finished with exit code {run_res.exit_code}")
-                if run_res.stdout:
+                if run_res is not None:
+                    run_data["logs"].append(f"[worker] container finished with exit code {run_res.exit_code}")
+                if run_res is not None and run_res.stdout:
                     run_data["logs"].append("--- stdout ---")
                     run_data["logs"].extend(run_res.stdout.splitlines())
-                if run_res.stderr:
+                if run_res is not None and run_res.stderr:
                     run_data["logs"].append("--- stderr ---")
                     run_data["logs"].extend(run_res.stderr.splitlines())
                 medium_flags = [f for f in flags if f.severity in (Severity.MEDIUM, Severity.LOW)]
@@ -808,11 +813,11 @@ def handle(job: dict) -> None:
                 score_breakdown=manifest_breakdown,
                 flags=manifest_flags,
                 monitorability_traces=monitor.trace(
-                    run_res.container_attrs,
-                    run_res.fs_diff,
-                    run_res.stdout,
-                    run_res.stderr,
-                    run_res.timed_out,
+                    run_res.container_attrs if run_res is not None else {},
+                    run_res.fs_diff if run_res is not None else [],
+                    run_res.stdout if run_res is not None else "",
+                    run_res.stderr if run_res is not None else "",
+                    run_res.timed_out if run_res is not None else False,
                 ),
                 duration_ms=result.get("duration_ms", 0),
                 finished_at=result.get("finished_at"),
@@ -821,7 +826,48 @@ def handle(job: dict) -> None:
                 user_name=job.get("userName"),
                 submission_type=job.get("type", "code"),
             )
+
+            submitted_files = user_files or {f"/workspace/{task.entrypoint if task else ('solution.js' if language == 'node' else 'solution.py')}": code}
+            repair_patch = ""
+            for suggestion in suggestions:
+                if suggestion.get("patchDiff"):
+                    repair_patch = suggestion["patchDiff"]
+                    break
+
+            artifact_bundle = create_artifact_bundle(
+                run_id=run_id,
+                manifest=manifest.to_redis_dict(),
+                submitted_files=submitted_files,
+                stdout=result.get("stdout", ""),
+                stderr=result.get("stderr", ""),
+                score_breakdown=manifest_breakdown.model_dump(mode="json") if manifest_breakdown else {},
+                flags=[flag.model_dump(mode="json") for flag in manifest_flags],
+                repair_patch=repair_patch,
+            )
+            manifest.artifact_hashes = {
+                **artifact_bundle.artifact_hashes,
+                "bundle": artifact_bundle.bundle_hash,
+            }
             r.set(f"sandbench:manifest:{run_id}", json.dumps(manifest.to_redis_dict()))
+            r.set(
+                f"sandbench:artifact:{run_id}",
+                json.dumps({
+                    "run_id": run_id,
+                    "bundle_dir": artifact_bundle.bundle_dir,
+                    "bundle_hash": artifact_bundle.bundle_hash,
+                    "artifact_hashes": artifact_bundle.artifact_hashes,
+                    "signed_urls": artifact_bundle.signed_urls,
+                }),
+            )
+            result["artifact"] = {
+                "bundleHash": artifact_bundle.bundle_hash,
+                "manifestUrl": artifact_bundle.signed_urls.get("manifest"),
+                "bundleUrl": artifact_bundle.signed_urls.get("bundle"),
+            }
+            if run_data is not None:
+                run_data["artifact"] = result["artifact"]
+                r.set(run_key, json.dumps(run_data))
+            r.set(f"sandbench:run:{run_id}", json.dumps(result))
             logger.info("RunManifest stored for %s", run_id)
         except Exception as manifest_err:
             logger.warning("Failed to store RunManifest for %s: %s", run_id, manifest_err)
@@ -839,7 +885,26 @@ def handle(job: dict) -> None:
                     "score": result["score"],
                     "verdict": result["verdict"],
                     "createdAt": result["finished_at"],
+                    "suite": task.suite if task else "core",
+                    "taskVersion": task.version if task else "0.1.0",
+                    "artifactBundleHash": result.get("artifact", {}).get("bundleHash", ""),
                 }
+                versioned_entry = upsert_versioned_leaderboard(
+                    r,
+                    run_id=run_id,
+                    user=entry["user"],
+                    user_id=entry["userId"],
+                    submission_id=entry["submissionId"],
+                    suite=entry["suite"],
+                    task_id=entry["taskId"],
+                    task_title=entry["taskTitle"],
+                    task_version=entry["taskVersion"],
+                    score=result["score"],
+                    verdict=result["verdict"],
+                    created_at=result["finished_at"],
+                    artifact_bundle_hash=entry["artifactBundleHash"],
+                )
+                entry["submissionHash"] = versioned_entry.submission_hash
                 # Upsert leaderboard entry: keep the higher score per (user, taskId)
                 lb_raw = r.get("leaderboard")
                 lb: list = json.loads(lb_raw) if lb_raw else []

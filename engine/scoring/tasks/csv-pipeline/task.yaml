@@ -1,4 +1,4 @@
-id: csv-pipeline
+﻿id: csv-pipeline
 title: CSV data transformation pipeline
 language: python
 difficulty: medium
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 20
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement a function transform_csv(csv_text) that takes a CSV string with
   headers and returns a summary dictionary. The CSV has columns: name, department,

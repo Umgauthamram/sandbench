@@ -1,4 +1,4 @@
-id: rest-api-parser
+﻿id: rest-api-parser
 title: HTTP request parser
 language: python
 difficulty: medium
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 20
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement a function parse_http_request(raw_request) that takes a raw
   HTTP request string and returns a dictionary with keys: method (str),

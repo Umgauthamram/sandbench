@@ -6,7 +6,7 @@ import { getRun } from "../../../lib/store";
 import type { Verdict } from "../../../lib/types";
 import { RunStream } from "../../../components/run-poller";
 import { MarkdownRenderer } from "../../../components/markdown-renderer";
-import { ArrowLeft, CheckCircle2, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { ArrowLeft, Box, CheckCircle2, Download, Fingerprint, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { getCurrentUser } from "../../../lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -148,6 +148,49 @@ export default async function RunDetailPage({
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Live logs */}
         <RunStream id={run.id} initialLogs={run.logs} initialStatus={run.status} />
+
+        {/* Artifact bundle */}
+        {run.artifact && (
+          <Card>
+            <h2 className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-blue-400">
+              <Box className="h-4 w-4" />
+              Artifact bundle
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <p className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
+                  Bundle hash
+                </p>
+                <p className="break-all rounded-lg border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs text-zinc-300">
+                  {run.artifact.bundleHash}
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {run.artifact.manifestUrl && (
+                  <a
+                    href={run.artifact.manifestUrl}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm font-semibold text-zinc-200 transition-colors hover:bg-zinc-700"
+                  >
+                    <Fingerprint className="h-4 w-4" />
+                    Manifest
+                  </a>
+                )}
+                {run.artifact.bundleUrl && (
+                  <a
+                    href={run.artifact.bundleUrl}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm font-semibold text-zinc-200 transition-colors hover:bg-zinc-700"
+                  >
+                    <Download className="h-4 w-4" />
+                    Bundle index
+                  </a>
+                )}
+              </div>
+              <p className="text-xs leading-relaxed text-zinc-500">
+                Local artifact links are signed pointers for the worker storage backend. Production storage can swap this for S3/R2 signed URLs.
+              </p>
+            </div>
+          </Card>
+        )}
 
         {/* Security flags */}
         {run.flags.length > 0 && (

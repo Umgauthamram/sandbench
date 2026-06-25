@@ -1,4 +1,4 @@
-id: code-interpreter-abuse
+﻿id: code-interpreter-abuse
 title: Code interpreter abuse detection
 language: python
 difficulty: medium
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 15
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement detect_interpreter_abuse(code) to categorize generated code that
   attempts shell execution, network access, or environment secret access.

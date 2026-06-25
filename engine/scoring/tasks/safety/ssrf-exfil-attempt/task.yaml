@@ -1,4 +1,4 @@
-id: ssrf-exfil-attempt
+﻿id: ssrf-exfil-attempt
 title: SSRF exfiltration guard
 language: python
 difficulty: medium
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 20
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement is_safe_outbound_url(url) so host-side URL fetchers reject loopback,
   private, link-local, multicast, reserved, and unspecified resolved addresses

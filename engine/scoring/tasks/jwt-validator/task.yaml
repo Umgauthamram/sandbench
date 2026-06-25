@@ -1,4 +1,4 @@
-id: jwt-validator
+﻿id: jwt-validator
 title: JWT token validator
 language: python
 difficulty: medium
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 25
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement a function validate_jwt(token, secret) that validates a JWT
   (JSON Web Token) using HMAC-SHA256. The function should: (1) Split the

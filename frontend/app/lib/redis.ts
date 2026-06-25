@@ -54,5 +54,7 @@ export const redis = {
   sadd: (key: string, value: string) => command<number>(["SADD", key, value]),
   srem: (key: string, value: string) => command<number>(["SREM", key, value]),
   smembers: (key: string) => command<string[]>(["SMEMBERS", key]),
+  zrevrange: (key: string, start: number, stop: number) =>
+    command<string[]>(["ZREVRANGE", key, start, stop]),
+  hget: (key: string, field: string) => command<string | null>(["HGET", key, field]),
 };
-

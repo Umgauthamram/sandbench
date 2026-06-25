@@ -1,4 +1,4 @@
-id: fizzbuzz
+﻿id: fizzbuzz
 title: FizzBuzz
 language: python
 difficulty: easy
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 5
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Write a function fizzbuzz(n) that returns a list of values for 1..n:
   "FizzBuzz" for multiples of 15, "Fizz" for multiples of 3,

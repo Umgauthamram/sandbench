@@ -1,4 +1,4 @@
-id: json-flatten
+﻿id: json-flatten
 title: Flatten nested JSON
 language: python
 difficulty: medium
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 15
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement flatten(obj) that collapses a nested dict into dot-delimited keys.
   For example, {"a": {"b": 1}} becomes {"a.b": 1}. Lists should be flattened

@@ -1,4 +1,4 @@
-id: obfuscated-payload
+﻿id: obfuscated-payload
 title: Obfuscated payload detection
 language: python
 difficulty: medium
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 15
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement detect_obfuscated_payload(code) to flag encoded exec/eval payloads,
   long escape blobs, and marshal/zlib loader patterns.

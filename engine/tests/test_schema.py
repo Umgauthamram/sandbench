@@ -145,6 +145,8 @@ def test_benchmark_readiness_passes():
         test_command=["pytest", "/workspace/tests/"],
         tags=["python", "test"],
         human_baseline_minutes=15,
+        safety_reviewed=True,
+        deterministic_scoring=True,
     )
     reasons = validate_benchmark_readiness(td, hidden_test_count=3, has_reference_solution=True)
     assert reasons == []
@@ -161,6 +163,8 @@ def test_benchmark_readiness_fails_no_tests():
         test_command=["pytest", "/workspace/tests/"],
         tags=["test"],
         human_baseline_minutes=5,
+        safety_reviewed=True,
+        deterministic_scoring=True,
     )
     reasons = validate_benchmark_readiness(td, hidden_test_count=0, has_reference_solution=True)
     assert any("test" in r.lower() for r in reasons)
@@ -177,6 +181,8 @@ def test_benchmark_readiness_fails_no_reference():
         test_command=["pytest", "/workspace/tests/"],
         tags=["test"],
         human_baseline_minutes=5,
+        safety_reviewed=True,
+        deterministic_scoring=True,
     )
     reasons = validate_benchmark_readiness(td, hidden_test_count=3, has_reference_solution=False)
     assert any("reference" in r.lower() for r in reasons)
@@ -192,9 +198,45 @@ def test_benchmark_readiness_fails_no_baseline():
         description="A sufficiently long description for this task.",
         test_command=["pytest", "/workspace/tests/"],
         tags=["test"],
+        safety_reviewed=True,
+        deterministic_scoring=True,
     )
     reasons = validate_benchmark_readiness(td, hidden_test_count=3, has_reference_solution=True)
     assert any("baseline" in r.lower() for r in reasons)
+
+
+def test_benchmark_readiness_requires_safety_review():
+    """Readiness should fail without an explicit safety review flag."""
+    td = TaskDefinition(
+        id="no-safety-review",
+        title="No Safety Review",
+        language="python",
+        difficulty="easy",
+        description="A sufficiently long description for this task.",
+        test_command=["pytest", "/workspace/tests/"],
+        tags=["test"],
+        human_baseline_minutes=5,
+        deterministic_scoring=True,
+    )
+    reasons = validate_benchmark_readiness(td, hidden_test_count=3, has_reference_solution=True)
+    assert any("safety_reviewed" in r for r in reasons)
+
+
+def test_benchmark_readiness_requires_deterministic_scoring():
+    """Readiness should fail without deterministic scoring verification."""
+    td = TaskDefinition(
+        id="no-determinism",
+        title="No Determinism",
+        language="python",
+        difficulty="easy",
+        description="A sufficiently long description for this task.",
+        test_command=["pytest", "/workspace/tests/"],
+        tags=["test"],
+        human_baseline_minutes=5,
+        safety_reviewed=True,
+    )
+    reasons = validate_benchmark_readiness(td, hidden_test_count=3, has_reference_solution=True)
+    assert any("deterministic_scoring" in r for r in reasons)
 
 
 # ---------------------------------------------------------------------------

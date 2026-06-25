@@ -123,6 +123,14 @@ class TaskDefinition(BaseModel):
     version: str = Field(default="0.1.0")
     human_baseline_minutes: Optional[int] = Field(default=None, ge=1)
     benchmark_ready: bool = Field(default=False)
+    safety_reviewed: bool = Field(
+        default=False,
+        description="True after benchmark maintainers complete a safety/data review.",
+    )
+    deterministic_scoring: bool = Field(
+        default=False,
+        description="True when scoring has been verified as deterministic.",
+    )
 
     # RL / broken code seed
     broken_code: str = Field(default="")
@@ -205,6 +213,12 @@ def validate_benchmark_readiness(
 
     if len(task_def.description) < 20:
         reasons.append("Description is too short (minimum 20 characters)")
+
+    if not task_def.safety_reviewed:
+        reasons.append("safety_reviewed must be true for benchmark-ready tasks")
+
+    if not task_def.deterministic_scoring:
+        reasons.append("deterministic_scoring must be true for benchmark-ready tasks")
 
     return reasons
 

@@ -1,98 +1,183 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { Award, Box, GitCommitHorizontal, History, ShieldCheck } from "lucide-react";
 import { VerdictBadge } from "../../components/badges";
-import { PageHeader } from "../../components/ui";
-import { listLeaderboard } from "../../lib/store";
+import { Card, PageHeader } from "../../components/ui";
+import { listLeaderboard, listTasks } from "../../lib/store";
 
-export const metadata: Metadata = { title: "Leaderboard — SandBench" };
+export const metadata: Metadata = { title: "Leaderboard - SandBench" };
 export const dynamic = "force-dynamic";
 
-export default async function LeaderboardPage() {
-  const entries = await listLeaderboard();
+export default async function LeaderboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ suite?: string; version?: string }>;
+}) {
+  const params = (await searchParams) ?? {};
+  const tasks = await listTasks();
+  const suites = Array.from(new Set(tasks.map((task) => task.suite ?? "core"))).sort();
+  const selectedSuite = params.suite || suites[0] || "core";
+  const selectedVersion =
+    params.version ||
+    tasks.find((task) => (task.suite ?? "core") === selectedSuite)?.version ||
+    "0.1.0";
+  const versions = Array.from(
+    new Set(
+      tasks
+        .filter((task) => (task.suite ?? "core") === selectedSuite)
+        .map((task) => task.version ?? "0.1.0"),
+    ),
+  ).sort();
+
+  const entries = await listLeaderboard({ suite: selectedSuite, version: selectedVersion });
+  const topScore = entries[0]?.score ?? 0;
+
   return (
     <>
       <PageHeader
         title="Leaderboard"
-        subtitle="Top submissions per task. Quarantined runs score 0."
+        subtitle="Versioned peak scores with immutable submission hashes and artifact provenance."
       />
-      <div className="flex flex-col lg:flex-row gap-8 items-start w-full">
-        {/* Left: Leaderboard Table */}
-        <div className="flex-1 w-full overflow-hidden rounded-xl border border-zinc-800">
-          <table className="w-full text-sm">
-            <thead className="bg-zinc-900/80 text-left text-xs uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
-              <tr>
-                <th className="px-4 py-3.5 font-medium">#</th>
-                <th className="px-4 py-3.5 font-medium">User</th>
-                <th className="px-4 py-3.5 font-medium">Task</th>
-                <th className="hidden px-4 py-3.5 font-medium sm:table-cell">
-                  Verdict
-                </th>
-                <th className="px-4 py-3.5 text-right font-medium">Score</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/60">
-              {entries.map((e, i) => (
-                <tr
-                  key={e.submissionId}
-                  className={`transition-colors hover:bg-zinc-800/40 ${
-                    i === 0
-                      ? "bg-orange-500/5"
-                      : i === 1
-                      ? "bg-zinc-400/5"
-                      : i === 2
-                      ? "bg-amber-800/5"
-                      : "bg-zinc-900/30"
-                  }`}
-                >
-                  <td className="px-4 py-3.5 font-mono text-zinc-500 tabular-nums">
-                    {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : e.rank}
-                  </td>
-                  <td className="px-4 py-3.5 font-semibold text-zinc-200">{e.user}</td>
-                  <td className="px-4 py-3.5 text-zinc-400">{e.taskTitle}</td>
-                  <td className="hidden px-4 py-3.5 sm:table-cell">
-                    <VerdictBadge verdict={e.verdict} />
-                  </td>
-                  <td className="px-4 py-3.5 text-right font-bold text-zinc-100 tabular-nums">
-                    {typeof e.score === "number"
-                      ? `${Math.round(e.score * 100)}%`
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {suites.map((suite) => (
+          <Link
+            key={suite}
+            href={`/leaderboard?suite=${suite}&version=${
+              tasks.find((task) => (task.suite ?? "core") === suite)?.version ?? "0.1.0"
+            }`}
+            className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+              suite === selectedSuite
+                ? "border-blue-500/40 bg-blue-500/10 text-blue-300"
+                : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {suite}
+          </Link>
+        ))}
+        {versions.length > 1 && (
+          <div className="ml-0 flex flex-wrap gap-2 md:ml-3">
+            {versions.map((version) => (
+              <Link
+                key={version}
+                href={`/leaderboard?suite=${selectedSuite}&version=${version}`}
+                className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                  version === selectedVersion
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                v{version}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
+        <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/60">
+          <div className="grid grid-cols-[64px_1fr_auto] gap-3 border-b border-zinc-800 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-zinc-500 md:grid-cols-[64px_1fr_1fr_110px_110px]">
+            <div>Rank</div>
+            <div>User</div>
+            <div className="hidden md:block">Task</div>
+            <div className="hidden md:block">Version</div>
+            <div className="text-right">Score</div>
+          </div>
+
+          <div className="divide-y divide-zinc-800/70">
+            {entries.map((entry) => {
+              const scorePct = Math.round(entry.score * 100);
+              const barWidth = topScore > 0 ? Math.max(6, Math.round((entry.score / topScore) * 100)) : scorePct;
+              return (
+                <div key={entry.submissionHash || entry.submissionId} className="px-4 py-4 hover:bg-zinc-800/30">
+                  <div className="grid grid-cols-[64px_1fr_auto] items-center gap-3 md:grid-cols-[64px_1fr_1fr_110px_110px]">
+                    <div className="font-mono text-sm text-zinc-500">#{entry.rank}</div>
+                    <div>
+                      <div className="font-semibold text-zinc-100">{entry.user}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                        <VerdictBadge verdict={entry.verdict} />
+                        {entry.runId && <span>{entry.runId}</span>}
+                      </div>
+                    </div>
+                    <div className="hidden text-sm text-zinc-300 md:block">{entry.taskTitle}</div>
+                    <div className="hidden text-sm text-zinc-500 md:block">
+                      {entry.suite ?? selectedSuite} / {entry.taskVersion ?? selectedVersion}
+                    </div>
+                    <div className="text-right font-mono text-lg font-bold text-zinc-50">{scorePct}%</div>
+                  </div>
+                  <div className="mt-3 h-1.5 rounded-full bg-zinc-800">
+                    <div className="h-full rounded-full bg-blue-500" style={{ width: `${barWidth}%` }} />
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-zinc-500 md:grid-cols-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <GitCommitHorizontal className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">
+                        submission {entry.submissionHash || entry.submissionId}
+                      </span>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-2 md:justify-end">
+                      <Box className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">
+                        bundle {entry.artifactBundleHash || "pending"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
           {entries.length === 0 && (
             <div className="p-12 text-center text-sm text-zinc-600">
-              No scored runs yet. Submit a solution to appear here.
+              No scored runs for {selectedSuite} v{selectedVersion} yet.
             </div>
           )}
         </div>
 
-        {/* Right: Info Sidebar */}
-        <div className="w-full lg:w-80 shrink-0 bg-white rounded-2xl p-6 border border-zinc-200 text-black space-y-4">
-          <div className="flex justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/important.png"
-              alt="Leaderboard criteria"
-              className="h-32 w-auto object-contain"
-            />
-          </div>
-          <div className="space-y-3">
-            <h3 className="text-base font-bold text-zinc-900">Leaderboard Criteria</h3>
-            <p className="text-xs text-zinc-700 leading-relaxed font-normal">
-              <strong>Ranking Metric:</strong> The leaderboard ranks users based on their 
-              <strong> peak (highest) score</strong> achieved for each benchmark task.
+        <div className="space-y-5">
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-blue-500/10 p-2 text-blue-400">
+                <Award className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Ranking model</h2>
+                <p className="text-xs text-zinc-500">Peak score per user and task</p>
+              </div>
+            </div>
+            <p className="mt-4 text-sm leading-relaxed text-zinc-400">
+              Phase 4 stores full attempt history separately from the ranked peak score, scoped by suite and task version.
             </p>
-            <p className="text-xs text-zinc-700 leading-relaxed font-normal">
-              <strong>Score Calculation:</strong> Every clean submission runs against a suite of 
-              hidden tests in our isolated sandbox. Your score is the percentage of passing test cases. 
-              Only your best-performing run per task is registered on the leaderboard.
+          </Card>
+
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-emerald-500/10 p-2 text-emerald-400">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Integrity</h2>
+                <p className="text-xs text-zinc-500">Hash-chained submissions</p>
+              </div>
+            </div>
+            <p className="mt-4 text-sm leading-relaxed text-zinc-400">
+              Each ranked attempt receives an immutable submission hash and links to a sealed artifact bundle.
             </p>
-            <p className="text-xs text-zinc-700 leading-relaxed font-normal">
-              <strong>Quarantined Runs:</strong> Submissions flagged as malicious by static or dynamic scans 
-              are quarantined and score 0%.
-            </p>
-          </div>
+          </Card>
+
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-amber-500/10 p-2 text-amber-400">
+                <History className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Current slice</h2>
+                <p className="text-xs text-zinc-500">
+                  {selectedSuite} / v{selectedVersion}
+                </p>
+              </div>
+            </div>
+          </Card>
         </div>
       </div>
     </>

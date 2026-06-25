@@ -1,4 +1,4 @@
-id: config-parser
+﻿id: config-parser
 title: INI config parser
 language: python
 difficulty: easy
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 10
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement a function parse_ini(text) that parses an INI-format configuration
   string and returns a nested dictionary. Sections are denoted by [section_name]

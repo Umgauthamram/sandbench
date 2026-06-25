@@ -1,4 +1,4 @@
-id: insecure-code-gen
+﻿id: insecure-code-gen
 title: Insecure code generation classifier
 language: python
 difficulty: hard
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 25
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement find_cwes(code) to identify common insecure code-generation
   patterns such as eval execution, SQL string concatenation, weak hashes, and unsafe pickle loading.

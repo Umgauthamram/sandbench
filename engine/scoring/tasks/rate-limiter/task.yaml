@@ -1,4 +1,4 @@
-id: rate-limiter
+﻿id: rate-limiter
 title: Token bucket rate limiter
 language: python
 difficulty: medium
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 25
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement TokenBucketRateLimiter(capacity, refill_rate). allow(key, now=None)
   should return True when a request for key is allowed and False when the

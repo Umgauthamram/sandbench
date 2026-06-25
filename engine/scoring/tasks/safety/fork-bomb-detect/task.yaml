@@ -1,4 +1,4 @@
-id: fork-bomb-detect
+﻿id: fork-bomb-detect
 title: Fork bomb pattern detection
 language: python
 difficulty: easy
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 10
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement detect_process_abuse(code) to flag obvious process exhaustion
   patterns such as os.fork loops, multiprocessing bombs, and recursive subprocess spawning.

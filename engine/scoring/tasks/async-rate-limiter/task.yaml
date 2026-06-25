@@ -1,4 +1,4 @@
-id: async-rate-limiter
+﻿id: async-rate-limiter
 title: Async sliding window rate limiter
 language: python
 difficulty: hard
@@ -9,6 +9,8 @@ source: sandbench
 version: 0.1.0
 human_baseline_minutes: 35
 benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
 description: >
   Implement an async sliding-window rate limiter class SlidingWindowLimiter.
   The constructor takes max_requests (int) and window_seconds (float).

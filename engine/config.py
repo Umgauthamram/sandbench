@@ -24,6 +24,8 @@ LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "gemini")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL_ENDPOINT_URL = os.environ.get("MODEL_ENDPOINT_URL", "")
 TRACE_LOG_PATH = os.environ.get("TRACE_LOG_PATH", "traces.jsonl")
+ARTIFACT_STORAGE_DIR = os.environ.get("ARTIFACT_STORAGE_DIR", "run-artifacts")
+ARTIFACT_SIGNING_SECRET = os.environ.get("ARTIFACT_SIGNING_SECRET", "sandbench-local-artifacts")
 
 # Archive Validation Limits
 MAX_UNCOMPRESSED = int(os.environ.get("MAX_UNCOMPRESSED", 5 * 1024 * 1024))
