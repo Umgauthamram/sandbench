@@ -18,16 +18,16 @@ ALLOWED_PREFIXES = ("/workspace", "/tmp")
 
 # Regular expression for network connection failures under block/none network policy
 NET_PATTERNS = [
-    "Network is unreachable",
-    "Temporary failure in name resolution",
-    "Connection refused",
-    "getaddrinfo",
-    "ENOTFOUND",
-    "ECONNREFUSED",
-    "EAI_AGAIN",
-    "socket.gaierror"
+    r"Network is unreachable",
+    r"Temporary failure in name resolution",
+    r"Connection refused",
+    r"getaddrinfo",
+    r"\bENOTFOUND\b",
+    r"\bECONNREFUSED\b",
+    r"\bEAI_AGAIN\b",
+    r"socket\.gaierror"
 ]
-NET_REGEX = re.compile("|".join(re.escape(p) for p in NET_PATTERNS), re.IGNORECASE)
+NET_REGEX = re.compile("|".join(NET_PATTERNS), re.IGNORECASE)
 
 # Resource limits patterns
 FORK_BOMB_PATTERNS = [

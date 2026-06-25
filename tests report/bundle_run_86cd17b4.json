@@ -1,0 +1,13 @@
+{
+  "run_id": "run_86cd17b4",
+  "bundle_hash": "67fe62b27bd519f13a6eb8f222b30346541c774f1d9fc79ddd5ca46609c765fb",
+  "artifact_hashes": {
+    "manifest.json": "3ad7dc21b3eb06f955f210b1757d15e0181f9fa4f174c0fddce0e8fa2aefe766",
+    "stdout.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "score_breakdown.json": "2130f6297f9eaacf339b41e90552aa1d9fe0aa57d6bdb28add56f40214c167a4",
+    "flags.json": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "submitted_code/solution.py": "d97f10b8d99bc2bac756e5c551672bd9f4fae8f579bfb733f29ee4cb1065133a",
+    "bundle.json": "917c3a308c5623dc0368f76eba59208e9790134c4d1ae8de82102cc80b00465a"
+  }
+}
