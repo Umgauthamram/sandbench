@@ -41,7 +41,7 @@ export function SplashScreen() {
       }`}
     >
       <HeroGeometric
-        badge="Hardened execution platform"
+       
         title1="Sand"
         title2="Bench"
       />

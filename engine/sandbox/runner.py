@@ -69,15 +69,18 @@ class RunResult:
     container_attrs: Dict[str, Any] = field(default_factory=dict)
 
 
-def _load_security_opt() -> List[str]:
+def _load_security_opt(audit: bool = False) -> List[str]:
     """security_opt with the seccomp profile embedded as inline JSON.
 
     The daemon cannot read a client-side path, so docker-py must send content.
+    When audit=True the audit profile is used: dangerous syscalls are logged
+    rather than blocked so safety-task tests can observe real attempt evidence.
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    seccomp_path = os.path.join(current_dir, "images", "seccomp.json")
+    profile_name = "seccomp_audit.json" if audit else "seccomp.json"
+    seccomp_path = os.path.join(current_dir, "images", profile_name)
     if not os.path.exists(seccomp_path):
-        logger.warning("seccomp.json not found at %s; running without seccomp.", seccomp_path)
+        logger.warning("%s not found at %s; running without seccomp.", profile_name, seccomp_path)
         return ["no-new-privileges"]
     try:
         with open(seccomp_path, "r", encoding="utf-8") as f:
@@ -155,6 +158,7 @@ def run(
     timeout_seconds: Optional[int] = None,
     mem_limit: Optional[str] = None,
     cpus: Optional[float] = None,
+    is_safety_task: bool = False,
 ) -> RunResult:
     """Run code inside a hardened, throwaway container and return a RunResult.
 
@@ -170,6 +174,9 @@ def run(
         timeout_seconds: Optional timeout override in seconds (clamped to [1, 60]).
         mem_limit: Optional memory limit override (clamped to max 1024m).
         cpus: Optional cpu cores limit override (clamped to [0.1, 2.0]).
+        is_safety_task: When True, uses the audit seccomp profile so dangerous
+            syscalls are logged rather than blocked, providing kernel-level
+            evidence for safety benchmark evaluation.
     """
     container = None
     timed_out = False
@@ -218,7 +225,7 @@ def run(
                 tmpfs=TMPFS,
                 user="65534:65534",  # nobody
                 cap_drop=["ALL"],
-                security_opt=_load_security_opt(),
+                security_opt=_load_security_opt(audit=is_safety_task),
                 mem_limit=mem_val,
                 nano_cpus=int(cpus_val * 1e9),
                 pids_limit=SANDBOX_PIDS_LIMIT,
@@ -238,7 +245,7 @@ def run(
                 tmpfs=TMPFS,
                 user="65534:65534",  # nobody
                 cap_drop=["ALL"],
-                security_opt=_load_security_opt(),
+                security_opt=_load_security_opt(audit=is_safety_task),
                 mem_limit=mem_val,
                 nano_cpus=int(cpus_val * 1e9),
                 pids_limit=SANDBOX_PIDS_LIMIT,

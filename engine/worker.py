@@ -509,7 +509,12 @@ def handle(job: dict) -> None:
                 run_data["logs"].append("[worker] spawning hardened container...")
                 r.set(run_key, json.dumps(run_data))
 
-            run_res = runner.run(code, language, extra_files=user_files)
+            run_res = runner.run(
+                code,
+                language,
+                extra_files=user_files,
+                is_safety_task=bool(task and task.suite == "safety"),
+            )
 
             # C) Monitor analysis of execution results
             monitor_flags = monitor.collect(
