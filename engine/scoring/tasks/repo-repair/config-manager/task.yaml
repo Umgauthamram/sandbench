@@ -1,0 +1,41 @@
+id: config-manager
+title: Multi-File Config Schema Manager
+language: python
+difficulty: medium
+suite: core
+capability: repo_repair
+tags: ["python", "config", "parser", "schema"]
+source: sandbench
+version: 0.1.0
+human_baseline_minutes: 15
+benchmark_ready: true
+safety_reviewed: true
+deterministic_scoring: true
+description: >
+  A configuration manager library that supports validation and merging of configurations.
+  The merge and environment variable override logic in config/manager.py has bugs: it fails
+  to recursively merge nested dictionaries, and does not correctly substitute environment
+  variables that are nested.
+  Fix the recursive merge and environment variable interpolation logic in config/manager.py.
+entrypoint: config/manager.py
+test_command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/workspace/tests/", "--tb=no"]
+scorer: pytest_fraction
+broken_code: |
+  import os
+
+  class ConfigManager:
+      def __init__(self, schema):
+          self.schema = schema
+
+      def _interpolate_env(self, value):
+          if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+              env_name = value[2:-1]
+              return os.environ.get(env_name, "")
+          return value
+
+      def merge(self, base: dict, override: dict) -> dict:
+          # Bug: Shallow merge only, does not recursively merge dicts
+          result = base.copy()
+          for k, v in override.items():
+              result[k] = self._interpolate_env(v)
+          return result

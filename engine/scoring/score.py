@@ -102,11 +102,31 @@ def score_submission(
                 "raw_output": f"Tests directory not found: {tests_dir}",
             }
 
+        # Load any predefined workspace files (for repo-repair tasks)
+        task_dir = tests_dir.parent
+        workspace_dir = task_dir / "workspace"
+        if workspace_dir.is_dir():
+            for root, dirs, files in os.walk(workspace_dir):
+                if "__pycache__" in dirs:
+                    dirs.remove("__pycache__")
+                for fname in files:
+                    if fname.endswith(".pyc") or fname.endswith(".pyo"):
+                        continue
+                    file_path = os.path.join(root, fname)
+                    rel_path = os.path.relpath(file_path, workspace_dir)
+                    container_path = "/workspace/" + rel_path.replace("\\", "/")
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        extra_files[container_path] = f.read()
+
+        # Route candidate code to the correct entrypoint
+        entrypoint_path = f"/workspace/{task.entrypoint}"
+        extra_files[entrypoint_path] = code
+
         # Merge user files into extra_files, protecting against test override
         if project_files:
-            entrypoint_path = f"/workspace/{task.entrypoint}"
             if entrypoint_path in project_files:
                 code = project_files[entrypoint_path]
+                extra_files[entrypoint_path] = code
 
             ignored_configs = {"conftest.py", "pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml"}
 
