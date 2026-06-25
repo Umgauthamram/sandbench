@@ -71,10 +71,27 @@ export async function listRuns(userId?: string): Promise<Run[]> {
   return filtered;
 }
 
+function transformRunArtifacts(run: Run): Run {
+  if (run.artifact) {
+    if (run.artifact.manifestUrl?.startsWith("local-artifact://")) {
+      run.artifact.manifestUrl = `/api/runs/${run.id}/artifacts?path=manifest.json`;
+    }
+    if (run.artifact.bundleUrl?.startsWith("local-artifact://")) {
+      run.artifact.bundleUrl = `/api/runs/${run.id}/artifacts?path=bundle.json`;
+    }
+  }
+  return run;
+}
+
 export async function getRun(id: string): Promise<Run | null> {
-  if (!redisConfigured) return mem.runs.get(id) ?? null;
+  if (!redisConfigured) {
+    const run = mem.runs.get(id) ?? null;
+    return run ? transformRunArtifacts(run) : null;
+  }
   const raw = await redis.get(RUN_KEY(id));
-  return raw ? (JSON.parse(raw) as Run) : null;
+  if (!raw) return null;
+  const run = JSON.parse(raw) as Run;
+  return transformRunArtifacts(run);
 }
 
 export async function createRun(input: SubmitInput): Promise<Run> {
