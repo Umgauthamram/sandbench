@@ -149,6 +149,26 @@ def _clamp_mem(override: str, ceiling: str = "1024m") -> str:
     return override
 
 
+def _ensure_golden_image(docker_client: docker.DockerClient, image: str) -> None:
+    """Ensure the required golden image exists, building it locally if needed."""
+    try:
+        docker_client.images.get(image)
+    except docker.errors.ImageNotFound:
+        if image in ("sandbench/python:golden", "sandbench/node:golden"):
+            logger.info("Golden image %s not found. Building locally from Dockerfile...", image)
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            dockerfile_name = "python.Dockerfile" if "python" in image else "node.Dockerfile"
+            docker_client.images.build(
+                path=os.path.join(current_dir, "images"),
+                dockerfile=dockerfile_name,
+                tag=image,
+                rm=True
+            )
+        else:
+            logger.info("Pulling image %s...", image)
+            docker_client.images.pull(image)
+
+
 def run(
     code: str,
     language: str = "python",
@@ -213,44 +233,25 @@ def run(
     start_time = time.perf_counter()
     try:
         docker_client = _get_client()
-        try:
-            container = docker_client.containers.create(
-                image,
-                command=run_cmd,
-                working_dir="/tmp",
-                detach=True,
-                network_mode="none",
-                read_only=True,
-                mounts=[docker.types.Mount(target="/workspace", source="", type="volume")],
-                tmpfs=TMPFS,
-                user="65534:65534",  # nobody
-                cap_drop=["ALL"],
-                security_opt=_load_security_opt(audit=is_safety_task),
-                mem_limit=mem_val,
-                nano_cpus=int(cpus_val * 1e9),
-                pids_limit=SANDBOX_PIDS_LIMIT,
-                labels={"sandbench": "1"},
-            )
-        except docker.errors.ImageNotFound:
-            logger.info("Image %s not found locally. Pulling image...", image)
-            docker_client.images.pull(image)
-            container = docker_client.containers.create(
-                image,
-                command=run_cmd,
-                working_dir="/tmp",
-                detach=True,
-                network_mode="none",
-                read_only=True,
-                mounts=[docker.types.Mount(target="/workspace", source="", type="volume")],
-                tmpfs=TMPFS,
-                user="65534:65534",  # nobody
-                cap_drop=["ALL"],
-                security_opt=_load_security_opt(audit=is_safety_task),
-                mem_limit=mem_val,
-                nano_cpus=int(cpus_val * 1e9),
-                pids_limit=SANDBOX_PIDS_LIMIT,
-                labels={"sandbench": "1"},
-            )
+        _ensure_golden_image(docker_client, image)
+        
+        container = docker_client.containers.create(
+            image,
+            command=run_cmd,
+            working_dir="/tmp",
+            detach=True,
+            network_mode="none",
+            read_only=True,
+            mounts=[docker.types.Mount(target="/workspace", source="", type="volume")],
+            tmpfs=TMPFS,
+            user="65534:65534",  # nobody
+            cap_drop=["ALL"],
+            security_opt=_load_security_opt(audit=is_safety_task),
+            mem_limit=mem_val,
+            nano_cpus=int(cpus_val * 1e9),
+            pids_limit=SANDBOX_PIDS_LIMIT,
+            labels={"sandbench": "1"},
+        )
 
         # 2. Copy the payload in BEFORE start (read-only is enforced only at
         #    start). Since /workspace is a volume, we can put_archive into it
