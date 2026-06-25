@@ -14,7 +14,7 @@
 FROM python:3.11-slim
 
 # Test/eval tooling the scorer needs, baked in so runs need no network.
-RUN pip install --no-cache-dir pytest==8.* \
+RUN pip install --no-cache-dir pytest==8.* pytest-asyncio \
  && rm -rf /root/.cache/pip
 
 # Non-root user; the runner also passes --user but we set a safe default.
