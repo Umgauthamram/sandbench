@@ -175,14 +175,17 @@ def handle(job: dict) -> None:
         job: Dictionary containing runId/id, payload/code, and language/task details.
     """
     run_id = job.get("runId") or job.get("id")
-    code = job.get("payload") or job.get("code") or ""
-    language = job.get("language") or "python"
-
     if not run_id:
         logger.error("Job missing run ID")
         return
 
-    logger.info("Processing job %s (language: %s)", run_id, language)
+    code = job.get("payload") or job.get("code") or ""
+    language = job.get("language") or "python"
+
+    task_id = job.get("taskId") or ""
+    task = task_registry.get_task(task_id)
+
+    logger.info("Processing job %s (language: %s, task: %s)", run_id, language, task_id)
 
     # 1. Fetch current run details from Redis key run:{run_id} to enrich frontend state if present
     run_key = f"run:{run_id}"
@@ -330,8 +333,6 @@ def handle(job: dict) -> None:
                 r.set(f"sandbench:run:{run_id}", json.dumps(result))
                 return
 
-            task_id = job.get("taskId") or ""
-            task = task_registry.get_task(task_id)
             entrypoint_filename = task.entrypoint if task else ("solution.js" if language == "node" else "solution.py")
             entrypoint_key = f"/workspace/{entrypoint_filename}"
             user_files = {entrypoint_key: file_content}
@@ -384,8 +385,6 @@ def handle(job: dict) -> None:
                 r.set(f"sandbench:run:{run_id}", json.dumps(result))
                 return
 
-            task_id = job.get("taskId") or ""
-            task = task_registry.get_task(task_id)
             entrypoint_filename = task.entrypoint if task else ("solution.js" if language == "node" else "solution.py")
             entrypoint_key = f"/workspace/{entrypoint_filename}"
             
