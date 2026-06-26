@@ -3,9 +3,14 @@
 All environment variable reads must be centralized here.
 """
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+# Fallback to the .env file in the engine directory itself
+engine_env = Path(__file__).resolve().parent / ".env"
+if engine_env.exists():
+    load_dotenv(dotenv_path=engine_env)
 
 # Redis Configuration
 UPSTASH_REDIS_URL = os.environ.get("UPSTASH_REDIS_URL", "redis://localhost:6379")

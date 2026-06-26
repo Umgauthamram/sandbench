@@ -135,6 +135,147 @@ def cmd_safety_eval(args):
         print(f"[ERROR] Safety evaluation failed: {e}")
         sys.exit(1)
 
+def print_verdict_card(verdict, score, passed, total, flags, review_text, patch_available, file_name, has_api_key, fix_mode=False):
+    import sys
+    # Check if stdout supports utf-8 or similar
+    def supports_utf8():
+        try:
+            "✅ ─ ⚠".encode(sys.stdout.encoding or "utf-8")
+            return True
+        except (LookupError, UnicodeEncodeError):
+            return False
+
+    if supports_utf8():
+        # Use nice Unicode symbols
+        verdict_symbols = {
+            "clean": "✅  clean",
+            "suspicious": "⚠  suspicious",
+            "broken": "❌  broken",
+            "malicious": "☠️  malicious"
+        }
+        bullet = "·"
+    else:
+        # Fallback to CP1252/ASCII safe symbols
+        verdict_symbols = {
+            "clean": "clean",
+            "suspicious": "[WARN] suspicious",
+            "broken": "[FAIL] broken",
+            "malicious": "[SEC_FAIL] malicious"
+        }
+        bullet = "*"
+
+    score_val = f"{score:.1f}" if score is not None else "0.0"
+    tests_str = f"({passed} / {total} tests passed)" if total > 0 else "(no tests run)"
+    
+    # 1. Score line
+    print(f"\nScore    {score_val}   {tests_str}")
+    
+    # 2. Verdict line
+    verdict_str = verdict_symbols.get(verdict, verdict)
+    print(f"Verdict  {verdict_str}")
+
+    # Compile "Why" reasons
+    reasons = []
+    
+    # Security flags
+    for f in flags:
+        if f.rule_id == "NET_EGRESS_ATTEMPT":
+            reasons.append("attempted outbound network call — blocked by sandbox")
+        elif f.rule_id == "FS_WRITE_OUTSIDE":
+            reasons.append(f"attempted file write outside workspace ({f.evidence}) — blocked by sandbox")
+        elif f.rule_id == "FORK_BOMB":
+            reasons.append("fork bomb attempt detected — blocked by sandbox")
+        elif f.rule_id == "TIMEOUT":
+            reasons.append("execution timed out — terminated by sandbox")
+        elif f.rule_id == "OOM_KILL":
+            reasons.append("out of memory (OOM) — container terminated")
+        elif f.rule_id == "DISK_EXHAUSTION":
+            reasons.append("disk space exhausted")
+        else:
+            evidence = f.evidence
+            if "ModuleNotFoundError" in evidence:
+                evidence = "missing module dependency inside sandbox"
+            reasons.append(f"{f.rule_id.lower().replace('_', ' ')} — {evidence}")
+
+    # Test failures and Review explanations
+    if passed < total and total > 0:
+        fail_msg = f"{total - passed} test{'s' if (total - passed) > 1 else ''} fail"
+        if review_text:
+            first_point = ""
+            for line in review_text.splitlines():
+                line_stripped = line.strip().lstrip("*-#·•").strip()
+                if line_stripped and not line_stripped.startswith("Code Review") and not line_stripped.startswith("{") and not line_stripped.startswith("}"):
+                    first_point = line_stripped
+                    break
+            
+            if first_point:
+                # Add the → X tests fail suffix to the first point
+                first_point_clean = first_point.rstrip(".")
+                reasons.append(f"{first_point_clean} → {fail_msg}")
+                
+                # Add up to 1 additional review point to keep card concise
+                other_points_added = 0
+                seen_first = False
+                for line in review_text.splitlines():
+                    line_stripped = line.strip().lstrip("*-#·•").strip()
+                    if line_stripped and not line_stripped.startswith("Code Review") and not line_stripped.startswith("{") and not line_stripped.startswith("}"):
+                        if not seen_first:
+                            seen_first = True
+                            continue
+                        reasons.append(line_stripped)
+                        other_points_added += 1
+                        if other_points_added >= 1:
+                            break
+            else:
+                reasons.append(fail_msg)
+        else:
+            if not has_api_key:
+                reasons.append(f"{fail_msg} — configure GEMINI_API_KEY for automatic bug diagnosis")
+            else:
+                reasons.append(fail_msg)
+    elif verdict == "broken" and total == 0:
+        if review_text:
+            first_point = ""
+            for line in review_text.splitlines():
+                line_stripped = line.strip().lstrip("*-#·•").strip()
+                if line_stripped and not line_stripped.startswith("Code Review") and not line_stripped.startswith("{") and not line_stripped.startswith("}"):
+                    first_point = line_stripped
+                    break
+            if first_point:
+                reasons.append(f"{first_point.rstrip('.')} → syntax/runtime error")
+            else:
+                reasons.append("syntax or runtime error preventing execution")
+        else:
+            reasons.append("syntax or runtime error preventing execution")
+    else:
+        # If passed all tests but we still have review_text
+        if review_text:
+            for line in review_text.splitlines():
+                line_stripped = line.strip().lstrip("*-#·•").strip()
+                if line_stripped and not line_stripped.startswith("Code Review") and not line_stripped.startswith("{") and not line_stripped.startswith("}"):
+                    reasons.append(line_stripped)
+                    break
+
+    # 3. Print Why line
+    if reasons:
+        print(f"Why      {bullet} {reasons[0]}")
+        for r in reasons[1:]:
+            print(f"         {bullet} {r}")
+    else:
+        print(f"Why      {bullet} code executed cleanly and passed all validation suites")
+
+    # 4. Print Fix line
+    if verdict == "clean" and score == 1.0:
+        print("Fix      no fixes required\n")
+    elif fix_mode:
+        print("Fix      patched code applied and written back to file successfully\n")
+    elif patch_available:
+        print(f"Fix      patch available — run `sandbench check {file_name} --fix`\n")
+    elif not has_api_key:
+        print("Fix      configure GEMINI_API_KEY to enable automated code repair\n")
+    else:
+        print("Fix      no automated patch could be generated. Check sandbox stdout/stderr above.\n")
+
 def cmd_check(args):
     file_path = Path(args.file).resolve()
     if not file_path.is_file():
@@ -240,6 +381,14 @@ def cmd_check(args):
         verdict = "malicious"
     elif run_res.exit_code != 0 or run_res.timed_out:
         verdict = "broken"
+        # Run scoring tests synchronously even if broken to see if any tests pass/fail
+        try:
+            score_res = score_submission(code, task, project_files=user_files)
+            score = score_res["score"]
+            passed = score_res.get("passed", 0)
+            total = score_res.get("total", 0)
+        except Exception:
+            pass
     else:
         # Run scoring tests synchronously
         print("Scoring code against tests inside sandbox...")
@@ -248,48 +397,42 @@ def cmd_check(args):
             score = score_res["score"]
             passed = score_res.get("passed", 0)
             total = score_res.get("total", 0)
-            verdict = "suspicious" if has_medium else "clean"
             
             # Merge any flags raised during scoring
             scoring_flags = score_res.get("flags", [])
             if scoring_flags:
                 flags.extend(scoring_flags)
-                if any(f.severity.value == "HIGH" if hasattr(f.severity, 'value') else f.severity == "HIGH" for f in scoring_flags):
-                    verdict = "malicious"
-                    score = 0.0
+            
+            # Re-evaluate security flags and test results to decide verdict
+            has_high_new = any(f.severity.value == "HIGH" if hasattr(f.severity, 'value') else f.severity == "HIGH" for f in flags)
+            has_medium_new = any(f.severity.value == "MEDIUM" if hasattr(f.severity, 'value') else f.severity == "MEDIUM" for f in flags)
+            
+            if has_high_new:
+                verdict = "malicious"
+                score = 0.0
+            elif total > 0 and passed == 0:
+                verdict = "broken"
+            elif (total > 0 and passed < total) or has_medium_new:
+                verdict = "suspicious"
+            else:
+                verdict = "clean"
         except Exception as e:
             print(f"[WARN] Scoring failed: {e}")
             verdict = "broken"
             score = 0.0
             
-    # Print results summary
-    print("\n" + "="*60)
-    print(f"VERDICT: {verdict.upper()}")
-    print(f"SCORE:   {score * 100:.0f}% ({passed}/{total} tests passed)")
-    print("="*60)
+    # LLM review lookup
+    review_text = ""
+    patch = ""
+    patch_available = False
+    has_api_key = False
     
-    if run_res.stdout:
-        print("\n--- Sandbox STDOUT ---")
-        print(run_res.stdout.strip())
-    if run_res.stderr:
-        print("\n--- Sandbox STDERR ---")
-        print(run_res.stderr.strip())
+    llm_provider = os.environ.get("LLM_PROVIDER", "gemini").lower()
+    if (llm_provider == "gemini" and os.environ.get("GEMINI_API_KEY")) or (llm_provider != "gemini"):
+        has_api_key = True
         
-    if flags:
-        print("\nSecurity Flags Raised:")
-        for f in flags:
-            sev = f.severity.value if hasattr(f.severity, 'value') else f.severity
-            print(f"  - [{sev}] {f.rule_id}: {f.evidence}")
-            
-    # 4. Optional repair loop
-    if args.repair and verdict != "clean" and score < 1.0:
-        # Make sure provider credentials exist if using gemini
-        llm_provider = os.environ.get("LLM_PROVIDER", "gemini").lower()
-        if llm_provider == "gemini" and not os.environ.get("GEMINI_API_KEY"):
-            print("\n[WARN] GEMINI_API_KEY is not set. Skipping repair. Set GEMINI_API_KEY to enable code repair.")
-            return
-
-        print("\nStarting LLM repair loop...")
+    if has_api_key and (verdict != "clean" or score < 1.0):
+        print("Diagnosing code issues with review engine...")
         error_output = (run_res.stderr or "")[:4000]
         if verdict in ("clean", "suspicious") and not error_output:
             error_output = None
@@ -306,33 +449,59 @@ def cmd_check(args):
             if review_res.get("ok"):
                 review_text = review_res.get("review_text", "")
                 patch = review_res.get("patch", "")
-                print(f"\nCode Review Suggestion:\n{review_text}")
-                
                 if patch and patch.strip():
-                    print("\nApplying suggested patch...")
-                    patched_code, method_str = patch_apply.apply_patch(code, patch)
-                    if patched_code:
-                        print(f"Patch applied successfully via {method_str}!")
-                        
-                        # Rescore
-                        print("Rescoring patched code inside sandbox...")
-                        rescore_files = {entrypoint_key: patched_code}
-                        rescore_res = score_submission(patched_code, task, project_files=rescore_files)
-                        new_score = rescore_res["score"]
-                        new_passed = rescore_res.get("passed", 0)
-                        new_total = rescore_res.get("total", 0)
-                        print(f"NEW VERDICT: CLEAN")
-                        print(f"NEW SCORE:   {new_score * 100:.0f}% ({new_passed}/{new_total} tests passed)")
-                        
-                        if args.write:
-                            file_path.write_text(patched_code, encoding="utf-8")
-                            print(f"[SUCCESS] Patched code written back to {args.file}")
-                    else:
-                        print(f"[ERROR] Failed to apply patch: {method_str}")
+                    patch_available = True
             else:
-                print(f"[ERROR] Review engine failed: {review_res.get('review_text')}")
+                print(f"[WARN] Diagnosis failed: {review_res.get('review_text')}")
         except Exception as e:
-            print(f"[ERROR] Repair failed: {e}")
+            print(f"[WARN] Diagnosis failed: {e}")
+
+    # Fix application
+    if args.fix and patch_available:
+        print("\nApplying suggested patch...")
+        patched_code, method_str = patch_apply.apply_patch(code, patch)
+        if patched_code:
+            # Rescore
+            print("Rescoring patched code inside sandbox...")
+            rescore_files = {entrypoint_key: patched_code}
+            rescore_res = score_submission(patched_code, task, project_files=rescore_files)
+            new_score = rescore_res["score"]
+            new_passed = rescore_res.get("passed", 0)
+            new_total = rescore_res.get("total", 0)
+            
+            # Write back
+            file_path.write_text(patched_code, encoding="utf-8")
+            
+            # Re-collect monitor flags for the patch run
+            print_verdict_card(
+                verdict="clean",
+                score=new_score,
+                passed=new_passed,
+                total=new_total,
+                flags=[],
+                review_text="",
+                patch_available=False,
+                file_name=args.file,
+                has_api_key=has_api_key,
+                fix_mode=True
+            )
+            return
+        else:
+            print(f"[ERROR] Failed to apply patch: {method_str}")
+
+    # Print main card
+    print_verdict_card(
+        verdict=verdict,
+        score=score,
+        passed=passed,
+        total=total,
+        flags=flags,
+        review_text=review_text,
+        patch_available=patch_available,
+        file_name=args.file,
+        has_api_key=has_api_key,
+        fix_mode=False
+    )
 
 def main():
     parser = argparse.ArgumentParser(
@@ -362,8 +531,7 @@ def main():
     check_parser = subparsers.add_parser("check", help="Run a single code check synchronously bypassing the queue and Redis")
     check_parser.add_argument("file", help="Path to the solution file to check")
     check_parser.add_argument("--task", help="Task ID to validate against (if omitted, attempts auto-detection)")
-    check_parser.add_argument("--repair", action="store_true", help="Perform LLM-in-the-loop repair if verification fails")
-    check_parser.add_argument("--write", action="store_true", help="Write back the patched code to the file if repair succeeds")
+    check_parser.add_argument("--fix", action="store_true", help="Attempt LLM-in-the-loop repair and write patch back to the file")
 
     args = parser.parse_args()
 
