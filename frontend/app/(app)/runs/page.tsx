@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { RunList } from "../../components/run-list";
-import { PageHeader } from "../../components/ui";
 import { listRuns } from "../../lib/store";
 import { getCurrentUser } from "../../lib/auth";
 

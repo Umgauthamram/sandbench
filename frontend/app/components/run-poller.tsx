@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "./ui";
-import type { SSEMessage, SSEError } from "../lib/types";
+import type { SSEMessage } from "../lib/types";
 
 interface RunStreamProps {
   id: string;

@@ -1,15 +1,5 @@
-# SandBench Positioning Rewrite
-
-Two paste-ready blocks. **Block A** replaces the top of `readme.md` (from the title down through `## Key Features`). Everything from `## System Architecture` onward stays exactly as it is. **Block B** replaces the `## Target Combined Feature Set` section in `docs/benchmark-landscape.md`.
-
----
-
-## BLOCK A — new `readme.md` opening
-
-> Replace from the first line through the end of `## Key Features`. Keep `## System Architecture`, `## Detailed Execution Flow`, `## Folder Structure`, and the setup guide unchanged — their mermaid diagrams still apply.
-
-```markdown
 # SandBench 🧪🛡️
+
 WEBSITE link : https://sandbench.vercel.app/
 
 **SandBench turns untrusted code into a trustworthy verdict — and turns those verdicts into a repair model you can run yourself.**
@@ -17,6 +7,28 @@ WEBSITE link : https://sandbench.vercel.app/
 You hand it code (your own, or something an LLM or agent generated). It runs that code inside a hardened, offline, ephemeral sandbox and returns one legible answer: a score, a security-and-correctness **verdict** (`clean` / `suspicious` / `broken` / `malicious`), the reasons behind it, and — when it can — a patch that passes. Every run is also recorded as a training example, so the same loop that *judges* code can *fine-tune a local model* that does the judging and repairing for you.
 
 It is one engine. You reach it through one of two doors, depending on what you need.
+
+---
+
+## ⚡ Quickstart (60 Seconds)
+
+Get a code trust verdict synchronously on a fresh machine in three lines of code.
+
+### Prerequisites
+* **Docker** installed and running on your machine.
+* **Python** (v3.10+) installed.
+
+### Commands
+```bash
+# 1. Clone the repository and navigate inside
+git clone https://github.com/Umgauthamram/sandbench.git && cd sandbench
+
+# 2. Install the lightweight engine requirements
+pip install -r engine/requirements.txt
+
+# 3. Run the built-in demo task check (securely evaluates a buggy solution and prints the verdict card)
+python cli/main.py check --demo
+```
 
 ---
 
@@ -79,37 +91,168 @@ It is also **self-hostable and offline by design** — the entire check-and-repa
 * 🏆 **Versioned Leaderboard**: Peak score per user, per task, per suite version. Submissions flagged malicious by static or dynamic analysis are quarantined and score 0%.
 * 🔒 **API Key Safety**: User-supplied keys are held only in host-side memory to reach your provider. They are never written to the database, persistent logs, or output traces.
 * 📡 **Language-Agnostic Queue**: A light Redis-list queue lets the Next.js frontend (TypeScript) and the Python engine communicate asynchronously.
-```
 
 ---
 
-## BLOCK B — replacement for `## Target Combined Feature Set`
+## 🏗️ Production / Bench-Train Deployment
 
-> In `docs/benchmark-landscape.md`, keep the `## Projects Reviewed` table and `## SandBench Today` as they are. Replace the `## Target Combined Feature Set` section with the following. (The "Source Links" section can stay.)
+Use this guide for setting up the multi-user web app frontend, Redis queue, and the background execution workers.
 
-```markdown
-## What SandBench Is (and Isn't)
+### Local Infrastructure Setup
 
-SandBench is **not** trying to be another benchmark platform. The projects in the table above — SWE-bench, Inspect AI, AgentBench, BigCodeBench — already own the "rank models across a large task suite" category. Competing on task count is a race we lose by definition, and framing SandBench as a smaller version of them is what makes the product read as derivative.
+#### 1. Setup the Engine (Backend Worker)
+1. Navigate to the engine folder:
+   ```bash
+   cd engine
+   ```
+2. Create and activate a virtual environment:
+   ```bash
+   python -m venv .venv
+   # Windows:
+   .venv\Scripts\Activate.ps1
+   # Linux/macOS:
+   source .venv/bin/activate
+   ```
+3. Install the dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Build the golden container runner images locally:
+   ```bash
+   # Python Sandbox Image:
+   docker build -f sandbox/images/python.Dockerfile -t sandbench/python:golden .
+   # Node Sandbox Image:
+   docker build -f sandbox/images/node.Dockerfile -t sandbench/node:golden .
+   ```
+5. Create a `.env` file in the `engine` directory:
+   ```env
+   UPSTASH_REDIS_URL=redis://localhost:6379
+   LLM_PROVIDER=gemini
+   GEMINI_API_KEY=your_key_here
+   ```
+6. Start the worker:
+   ```bash
+   python worker.py
+   ```
 
-SandBench is a different shape:
+#### 2. Setup the Frontend Portal
+1. Navigate to the frontend folder:
+   ```bash
+   cd ../frontend
+   ```
+2. Install the node modules:
+   ```bash
+   npm install
+   ```
+3. Create a `.env` file in the `frontend` directory:
+   ```env
+   UPSTASH_REDIS_REST_URL=http://localhost:6379
+   UPSTASH_REDIS_REST_TOKEN=dummy_token
+   AUTH_SECRET=your_32_byte_secret_here
+   ENCRYPTION_KEY=your_32_byte_hex_key_here
+   ```
+4. Run the Next.js development server:
+   ```bash
+   npm run dev
+   ```
+5. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-> **A closed loop that turns untrusted code into a trust verdict, and turns verdicts into a self-hosted repair model.**
+---
 
-The nearest real comparable is **HUD / Prime Intellect** (the eval-to-training-data loop), not SWE-bench. We do not beat them on cloud scale and should not try. We differentiate on three axes none of them combine:
+### Cloud Deployment
 
-1. **Verdict-first output.** Security *and* correctness expressed as one trust judgment with evidence (monitorability traces), not a bare pass-fraction. Other tools hand you an isolated box or a score and leave the "should I trust this?" question to you.
-2. **Self-hostable and offline.** The whole loop runs on one host with sandbox networking disabled. Every major comparable is cloud-first. This is the wedge for proprietary, regulated, or air-gapped code that structurally cannot use a hosted sandbox.
-3. **The loop yields an owned asset.** Traces become a fine-tuned local repair model, not a disposable leaderboard entry.
+#### Frontend Portal (Vercel)
+Import the `frontend` subdirectory of your repository into Vercel. 
+* Under **Project Settings > General**, set the **Root Directory** to `frontend` and make sure the **Framework Preset** is set to **Next.js**.
+* Supply the required environment variables (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `AUTH_SECRET`, and `ENCRYPTION_KEY`).
 
-## How the Engine Is Built
+#### Execution Worker (Ubuntu Server + Coolify)
+1. Build the worker image and push it to your registry (e.g., Docker Hub).
+2. Create a new **Docker Image** resource in Coolify.
+3. Under the resource settings, go to **Volumes** and mount the host Docker socket:
+   ```text
+   /var/run/docker.sock:/var/run/docker.sock
+   ```
+4. Add the required environment variables (`UPSTASH_REDIS_URL`, `GEMINI_API_KEY`, etc.).
+5. SSH into the host server and build the golden images so they are available to the host daemon:
+   ```bash
+   # Build Python golden
+   docker build -t sandbench/python:golden - < engine/sandbox/images/python.Dockerfile
+   # Build Node golden
+   docker build -t sandbench/node:golden - < engine/sandbox/images/node.Dockerfile
+   ```
+6. Deploy the worker in Coolify.
 
-The four surfaces below are the **internals** of that loop — how the engine is built, not what the product is. They are sequenced so each one feeds the next, rather than shipped as four parallel features.
+---
 
-1. **Task suites** — versioned task packs with metadata, hidden tests, reference solutions, tags, human-baseline estimates, and benchmark-readiness flags. *(Feeds: what the sandbox runs.)*
-2. **Execution harness** — strict sandbox runner, deterministic scoring, retries, pass@k, artifacts, audit logs. *(Produces: the verdict + score.)*
-3. **Model/agent adapters** — OpenAI-compatible endpoints plus named providers, external CLI agents, local models, cost/token tracking, safe secrets handling. *(Powers: the repair stage, and the swap to a local model.)*
-4. **Safety evaluation** — static/dynamic gates, prompt-injection tasks, code-interpreter abuse checks, exfiltration/SSRF tests, insecure-code tests, monitorability traces. *(Sharpens: the verdict, especially `suspicious` and `malicious`.)*
+## 📂 System Architecture & Folder Directory
 
-A task is not benchmark-ready until it has metadata, hidden tests, a reference solution, and deterministic scoring — because every run also becomes training data, and bad signal poisons the model the loop is meant to produce.
+### System Architecture Diagram
+```mermaid
+graph TD
+    User(["User Client"]) -->|Submit Code / Trigger Eval| FE["Next.js Frontend / Vercel"]
+    FE -->|Read/Write Session & User Data| DB[("Upstash Redis / MongoDB")]
+    FE -->|LPUSH Job Data| Queue["Redis Job Queue"]
+    
+    subgraph HS ["Hetzner Server (Ubuntu + Coolify)"]
+        Worker["Python Worker"] -->|BRPOP Job Data| Queue
+        Worker -->|1. Run Static Scan & Seccomp| Guard["SSRF Guard / Static Analysis"]
+        Worker -->|2. Create Sandbox| Docker["Host Docker Daemon"]
+        Docker -->|3. Spawn Offline Container| Container["Hardened Sandbox Container"]
+        Container -->|4. Execute Pytest / Jest| Run["Test Runner"]
+        
+        Worker -->|5. Optional LLM Repair| LLM["External LLM API"]
+    end
+    
+    Worker -->|6. Save Scored Run Results| DB
+```
+
+### End-to-End Sequence Flow
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User Client
+    participant FE as Next.js API (Vercel)
+    participant Redis as Redis DB (Upstash)
+    participant Worker as Python Worker (Hetzner)
+    participant Docker as Docker Host
+    participant LLM as External LLM API
+    
+    User->>FE: POST /api/submit or /api/rl-eval
+    Note over FE: Authenticates user & validates input schemas
+    FE->>Redis: SET run:id (status: queued)
+    FE->>Redis: LPUSH sandbench:jobs {job}
+    FE-->>User: Return run_id (201 Created)
+    
+    Note over Worker: Listening on Queue
+    Redis->>Worker: BRPOP job data
+    Worker->>Worker: Run static scans (Bandit/Semgrep) & SSRF safety check
+    
+    rect rgb(24, 24, 27)
+        Note over Worker, Docker: Dynamic Sandbox Execution
+        Worker->>Docker: Create container (sandbench/*:golden)
+        Docker->>Docker: Mount /work tmpfs, apply CPU/memory/PID limits & drop network
+        Worker->>Docker: Start container and run Pytest / Jest
+        Docker-->>Worker: Return exit code, stdout, and stderr
+        Worker->>Docker: Destroy container
+    end
+    
+    alt Optional LLM Repair Loop (If failed tests)
+        Worker->>LLM: Send code & error logs to request patch
+        LLM-->>Worker: Return review text & unified diff patch
+        Worker->>Worker: Apply patch via patch-ng
+        Worker->>Docker: Create new container and re-run tests
+        Docker-->>Worker: Return updated score (calculate reward)
+        Worker->>Docker: Destroy container
+    end
+    
+    Worker->>Redis: SET sandbench:run:id {results}
+    Worker->>Redis: Update leaderboard (if clean high score)
+    
+    loop Real-time Polling / Streaming
+        User->>FE: GET /api/runs/[id]
+        FE->>Redis: GET sandbench:run:id
+        Redis-->>FE: Return run state & logs
+        FE-->>User: Display status, score, and repair logs
+    end
 ```

@@ -5,11 +5,9 @@ import { usePathname } from "next/navigation";
 import { Logo } from "./logo";
 import { 
   LayoutDashboard, 
-  Plus, 
   ListChecks, 
   Trophy, 
   Boxes,
-  Bot,
   FlaskConical,
   ShieldCheck,
   Settings,
