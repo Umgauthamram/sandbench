@@ -276,12 +276,7 @@ def print_verdict_card(verdict, score, passed, total, flags, review_text, patch_
     else:
         print("Fix      no automated patch could be generated. Check sandbox stdout/stderr above.\n")
 
-def cmd_check(args):
-    file_path = Path(args.file).resolve()
-    if not file_path.is_file():
-        print(f"[ERROR] Solution file not found: {args.file}")
-        sys.exit(1)
-        
+def _run_check_internal(args, file_path):
     code = file_path.read_text(encoding="utf-8")
     
     # 1. Load tasks from registry
@@ -425,10 +420,15 @@ def cmd_check(args):
     review_text = ""
     patch = ""
     patch_available = False
-    has_api_key = False
-    
     llm_provider = os.environ.get("LLM_PROVIDER", "gemini").lower()
-    if (llm_provider == "gemini" and os.environ.get("GEMINI_API_KEY")) or (llm_provider != "gemini"):
+    has_api_key = False
+    if llm_provider == "gemini" and os.environ.get("GEMINI_API_KEY"):
+        has_api_key = True
+    elif llm_provider == "openai" and os.environ.get("OPENAI_API_KEY"):
+        has_api_key = True
+    elif llm_provider == "anthropic" and os.environ.get("ANTHROPIC_API_KEY"):
+        has_api_key = True
+    elif llm_provider == "local":
         has_api_key = True
         
     if has_api_key and (verdict != "clean" or score < 1.0):
@@ -503,6 +503,50 @@ def cmd_check(args):
         fix_mode=False
     )
 
+def cmd_check(args):
+    if not args.file and not args.demo:
+        print("[ERROR] Please specify a solution file to check, or run with --demo.")
+        sys.exit(1)
+
+    temp_dir = None
+    try:
+        if args.demo:
+            import tempfile
+            demo_code = """def fizzbuzz(n):
+    # Off-by-one at the range boundary: range(1, n) instead of range(1, n+1)
+    out = []
+    for i in range(1, n):
+        if i % 15 == 0:
+            out.append("FizzBuzz")
+        elif i % 3 == 0:
+            out.append("Fizz")
+        elif i % 5 == 0:
+            out.append("Buzz")
+        else:
+            out.append(i)
+    return out
+"""
+            temp_dir = tempfile.mkdtemp(prefix="sandbench_demo_")
+            file_path = Path(temp_dir) / "fizzbuzz_demo.py"
+            file_path.write_text(demo_code, encoding="utf-8")
+            args.file = "fizzbuzz_demo.py"
+            if not args.task:
+                args.task = "fizzbuzz"
+        else:
+            file_path = Path(args.file).resolve()
+            if not file_path.is_file():
+                print(f"[ERROR] Solution file not found: {args.file}")
+                sys.exit(1)
+
+        _run_check_internal(args, file_path)
+    finally:
+        if temp_dir:
+            import shutil
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception:
+                pass
+
 def main():
     parser = argparse.ArgumentParser(
         prog="sandbench",
@@ -529,9 +573,10 @@ def main():
 
     # 4. check
     check_parser = subparsers.add_parser("check", help="Run a single code check synchronously bypassing the queue and Redis")
-    check_parser.add_argument("file", help="Path to the solution file to check")
+    check_parser.add_argument("file", nargs="?", help="Path to the solution file to check")
     check_parser.add_argument("--task", help="Task ID to validate against (if omitted, attempts auto-detection)")
     check_parser.add_argument("--fix", action="store_true", help="Attempt LLM-in-the-loop repair and write patch back to the file")
+    check_parser.add_argument("--demo", action="store_true", help="Run the built-in demo task (fizzbuzz buggy solution)")
 
     args = parser.parse_args()
 
