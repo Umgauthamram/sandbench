@@ -20,6 +20,18 @@ SANDBOX_MEM_LIMIT = os.environ.get("SANDBOX_MEM_LIMIT", "256m")
 SANDBOX_CPUS = float(os.environ.get("SANDBOX_CPUS", "0.5"))
 SANDBOX_PIDS_LIMIT = int(os.environ.get("SANDBOX_PIDS_LIMIT", "64"))
 SANDBOX_TIMEOUT_SECONDS = int(os.environ.get("SANDBOX_TIMEOUT_SECONDS", "20"))
+
+# Isolation runtime for the sandbox container.
+#   "auto"  - use gVisor (runsc) when the daemon has it, else fall back to runc
+#   "runsc" - require gVisor; also accepts any runtime name the daemon exposes
+#   "runc"  - force the default shared-kernel runtime
+SANDBOX_RUNTIME = os.environ.get("SANDBOX_RUNTIME", "auto").strip().lower()
+
+# When true, a run is refused outright rather than executed on shared-kernel
+# runc. Set this on any host that evaluates genuinely untrusted code.
+SANDBOX_REQUIRE_HARDENED = os.environ.get(
+    "SANDBOX_REQUIRE_HARDENED", "0"
+).strip().lower() in ("1", "true", "yes", "on")
 ORPHAN_TTL_SECONDS = int(os.environ.get("ORPHAN_TTL_SECONDS", "300"))
 MAX_PAYLOAD_BYTES = int(os.environ.get("MAX_PAYLOAD_BYTES", "262144"))
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")

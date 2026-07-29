@@ -85,6 +85,12 @@ It is also **self-hostable and offline by design** — the entire check-and-repa
   * Root filesystem mounted read-only, except a writable `/work` `tmpfs`.
   * Linux capabilities dropped (`--cap-drop ALL`) and `no-new-privileges` enforced.
   * Static gates: Bandit, Semgrep, YARA, and obfuscation heuristics.
+* 🧱 **Pluggable Isolation Boundary (gVisor)**: The sandbox runtime is configurable. With gVisor (`runsc`) installed, submissions execute behind a **userspace kernel** — the Sentry implements the syscall interface in userspace and forwards only a narrow filtered set to the host, so a container escape has to break the Sentry before it reaches the host kernel. No hardware virtualisation required, so it works on an ordinary VPS or laptop. Set `SANDBOX_REQUIRE_HARDENED=1` and a run is *refused* rather than executed on the shared-kernel runtime. Every result records which boundary produced it. See **[docs/isolation.md](docs/isolation.md)**.
+
+  ```bash
+  sudo bash scripts/install-gvisor.sh   # install + register runsc with Docker
+  python cli/main.py doctor             # report the boundary this host will actually use
+  ```
 * 🤖 **RL Repair Loop That Produces Training Data**: Connect any model as a repair agent. SandBench drives a rollout, scores the improvement, and records each attempt as a fine-tuning example:
   $$\text{Reward} = \text{Score}_{\text{after}} - \text{Score}_{\text{before}}$$
 * 🔁 **Bring-Your-Own / Own-Your-Model**: Start on a hosted endpoint; fine-tune on your own traces; swap in a local model with no client changes.

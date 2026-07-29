@@ -194,6 +194,14 @@ def score_submission(
         result = _parse_pytest_fraction(raw_output)
         result["raw_output"] = truncated
 
+        # Record which isolation boundary produced this score. A verdict is only
+        # as trustworthy as the sandbox behind it, so it travels with the result.
+        result["isolation"] = {
+            "runtime": run_res.runtime,
+            "level": run_res.isolation,
+            "note": run_res.isolation_note,
+        }
+
         # Collect runtime security flags from the scoring container
         result["flags"] = monitor.collect(
             run_res.container_attrs,

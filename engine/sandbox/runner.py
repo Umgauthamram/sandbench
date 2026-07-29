@@ -40,6 +40,8 @@ from config import (
     SANDBOX_PIDS_LIMIT,
     SANDBOX_TIMEOUT_SECONDS,
     ORPHAN_TTL_SECONDS,
+    SANDBOX_RUNTIME,
+    SANDBOX_REQUIRE_HARDENED,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,155 @@ client: docker.DockerClient | None = None
 
 # The only writable area at runtime. RAM-backed, hard size cap.
 TMPFS = {"/tmp": "rw,size=16m,mode=1777"}
+
+# ---------------------------------------------------------------------------
+# Isolation runtimes
+#
+# runc executes the container directly against the host kernel: every syscall
+# the submission makes is serviced by the same kernel the host runs on, so a
+# kernel vulnerability is a host compromise. seccomp narrows the syscall
+# surface but does not change who implements it.
+#
+# gVisor (runsc) puts a userspace kernel — the Sentry — between the container
+# and the host. The container's syscalls are implemented in Go inside a
+# sandboxed process, and only a small, filtered set reaches the host kernel.
+# That is a genuine isolation boundary and it needs no hardware virtualisation,
+# which makes it the one hardening step available on ordinary VPS hosts and
+# developer laptops.
+#
+# Preference is by strength, strongest first. Anything not listed is treated as
+# shared-kernel unless the operator names it explicitly.
+# ---------------------------------------------------------------------------
+ISOLATION_GVISOR = "gvisor"
+ISOLATION_SHARED_KERNEL = "shared-kernel"
+
+# gVisor runtime names, in preferred order. runsc-kvm uses KVM as the platform
+# switch (faster syscalls) but is still the same Sentry boundary.
+GVISOR_RUNTIMES = ("runsc", "runsc-kvm", "runsc-ptrace", "gvisor")
+
+_runtimes_cache: Optional[List[str]] = None
+_isolation_warned = False
+
+
+class HardenedRuntimeUnavailable(RuntimeError):
+    """Raised when SANDBOX_REQUIRE_HARDENED is set but no gVisor runtime exists."""
+
+
+def available_runtimes(docker_client: Optional[docker.DockerClient] = None) -> List[str]:
+    """Return the runtime names the Docker daemon has registered.
+
+    Cached: the daemon's runtime list does not change without a daemon restart,
+    and this is called on every run.
+    """
+    global _runtimes_cache
+    if _runtimes_cache is not None:
+        return _runtimes_cache
+    try:
+        docker_client = docker_client or _get_client()
+        info = docker_client.info() or {}
+        _runtimes_cache = sorted((info.get("Runtimes") or {}).keys())
+    except Exception as e:
+        logger.warning("Could not query Docker runtimes: %s", e)
+        _runtimes_cache = []
+    return _runtimes_cache
+
+
+def _first_gvisor(runtimes: List[str]) -> Optional[str]:
+    for name in GVISOR_RUNTIMES:
+        if name in runtimes:
+            return name
+    return None
+
+
+def resolve_runtime(
+    docker_client: Optional[docker.DockerClient] = None,
+    audit: bool = False,
+) -> tuple[Optional[str], str, str]:
+    """Decide which container runtime this run should use.
+
+    Returns (runtime_name_or_None, isolation_level, human_readable_note).
+    A runtime of None means "let the daemon use its default", i.e. runc.
+
+    Audit runs are a deliberate exception. Safety tasks rely on the audit
+    seccomp profile logging blocked syscalls so the monitor can cite real
+    attempt evidence. Under gVisor the Sentry services those syscalls itself,
+    so host-level seccomp audit records are not produced and that evidence
+    disappears. Audit runs therefore stay on runc unless the operator has
+    explicitly pinned a gVisor runtime and accepted the trade-off.
+    """
+    global _isolation_warned
+    runtimes = available_runtimes(docker_client)
+    requested = (SANDBOX_RUNTIME or "auto").strip().lower()
+    gvisor = _first_gvisor(runtimes)
+
+    # Operator pinned a specific runtime by name.
+    if requested not in ("auto", "", "runc", "default"):
+        if requested not in runtimes:
+            msg = (
+                f"SANDBOX_RUNTIME={requested!r} is not registered with the Docker "
+                f"daemon (available: {runtimes or 'unknown'})."
+            )
+            if SANDBOX_REQUIRE_HARDENED:
+                raise HardenedRuntimeUnavailable(msg)
+            logger.warning("%s Falling back to the default runtime.", msg)
+            return None, ISOLATION_SHARED_KERNEL, msg + " Fell back to runc."
+        level = ISOLATION_GVISOR if requested in GVISOR_RUNTIMES else ISOLATION_SHARED_KERNEL
+        return requested, level, f"Pinned runtime {requested}."
+
+    # Explicitly asked for runc.
+    if requested in ("runc", "default"):
+        if SANDBOX_REQUIRE_HARDENED:
+            raise HardenedRuntimeUnavailable(
+                "SANDBOX_REQUIRE_HARDENED=1 conflicts with SANDBOX_RUNTIME=runc."
+            )
+        return None, ISOLATION_SHARED_KERNEL, "Shared-kernel runc requested explicitly."
+
+    # auto
+    if audit and gvisor:
+        return (
+            None,
+            ISOLATION_SHARED_KERNEL,
+            "Audit run kept on runc so seccomp syscall-attempt evidence is preserved; "
+            f"pin SANDBOX_RUNTIME={gvisor} to override.",
+        )
+    if gvisor:
+        return gvisor, ISOLATION_GVISOR, f"Using {gvisor} (userspace kernel)."
+
+    if SANDBOX_REQUIRE_HARDENED:
+        raise HardenedRuntimeUnavailable(
+            "SANDBOX_REQUIRE_HARDENED=1 but no gVisor runtime is registered with "
+            "the Docker daemon. Install gVisor (see docs/isolation.md) or unset "
+            "SANDBOX_REQUIRE_HARDENED to run on shared-kernel runc."
+        )
+    if not _isolation_warned:
+        logger.warning(
+            "gVisor not available — running on shared-kernel runc. The submission's "
+            "syscalls are serviced by the host kernel. See docs/isolation.md."
+        )
+        _isolation_warned = True
+    return None, ISOLATION_SHARED_KERNEL, "gVisor not installed; using shared-kernel runc."
+
+
+def isolation_report(docker_client: Optional[docker.DockerClient] = None) -> Dict[str, Any]:
+    """Machine-readable isolation posture, for `check --isolation` and run cards."""
+    runtimes = available_runtimes(docker_client)
+    gvisor = _first_gvisor(runtimes)
+    try:
+        runtime, level, note = resolve_runtime(docker_client)
+        error = None
+    except HardenedRuntimeUnavailable as e:
+        runtime, level, note, error = None, ISOLATION_SHARED_KERNEL, str(e), str(e)
+    return {
+        "configured": SANDBOX_RUNTIME,
+        "require_hardened": SANDBOX_REQUIRE_HARDENED,
+        "available_runtimes": runtimes,
+        "gvisor_available": bool(gvisor),
+        "gvisor_runtime": gvisor,
+        "effective_runtime": runtime or "runc",
+        "isolation": level,
+        "note": note,
+        "error": error,
+    }
 
 
 def _get_client() -> docker.DockerClient:
@@ -67,6 +218,11 @@ class RunResult:
     timed_out: bool
     fs_diff: List[Dict[str, Any]] = field(default_factory=list)
     container_attrs: Dict[str, Any] = field(default_factory=dict)
+    # Which isolation boundary actually executed this run. Part of the evidence
+    # trail: a verdict is only as trustworthy as the sandbox that produced it.
+    runtime: str = "runc"
+    isolation: str = ISOLATION_SHARED_KERNEL
+    isolation_note: str = ""
 
 
 def _load_security_opt(audit: bool = False) -> List[str]:
@@ -230,13 +386,17 @@ def run(
     if cpus is not None:
         cpus_val = min(max(0.1, cpus), 2.0)
 
+    # Resolve the isolation boundary before anything else. If the host is
+    # configured to require gVisor and does not have it, refuse the run rather
+    # than silently executing untrusted code against the host kernel.
+    runtime, isolation, isolation_note = resolve_runtime(audit=is_safety_task)
+
     start_time = time.perf_counter()
     try:
         docker_client = _get_client()
         _ensure_golden_image(docker_client, image)
-        
-        container = docker_client.containers.create(
-            image,
+
+        create_kwargs: Dict[str, Any] = dict(
             command=run_cmd,
             working_dir="/tmp",
             detach=True,
@@ -250,8 +410,32 @@ def run(
             mem_limit=mem_val,
             nano_cpus=int(cpus_val * 1e9),
             pids_limit=SANDBOX_PIDS_LIMIT,
-            labels={"sandbench": "1"},
+            labels={"sandbench": "1", "sandbench.isolation": isolation},
         )
+        if runtime:
+            create_kwargs["runtime"] = runtime
+
+        try:
+            container = docker_client.containers.create(image, **create_kwargs)
+        except docker.errors.APIError as e:
+            # A registered-but-broken runtime (missing shim binary, unsupported
+            # platform, no KVM for runsc-kvm) only fails at container creation.
+            if not runtime:
+                raise
+            if SANDBOX_REQUIRE_HARDENED:
+                raise HardenedRuntimeUnavailable(
+                    f"Runtime {runtime!r} is registered but failed to start a "
+                    f"container ({e}), and SANDBOX_REQUIRE_HARDENED=1."
+                ) from e
+            logger.warning(
+                "Runtime %s failed to create a container (%s). Falling back to runc.",
+                runtime, e,
+            )
+            create_kwargs.pop("runtime", None)
+            create_kwargs["labels"]["sandbench.isolation"] = ISOLATION_SHARED_KERNEL
+            runtime, isolation = None, ISOLATION_SHARED_KERNEL
+            isolation_note = f"gVisor create failed ({type(e).__name__}); fell back to runc."
+            container = docker_client.containers.create(image, **create_kwargs)
 
         # 2. Copy the payload in BEFORE start (read-only is enforced only at
         #    start). Since /workspace is a volume, we can put_archive into it
@@ -350,4 +534,7 @@ def run(
         timed_out=timed_out,
         fs_diff=fs_diff,
         container_attrs=container_attrs,
+        runtime=runtime or "runc",
+        isolation=isolation,
+        isolation_note=isolation_note,
     )

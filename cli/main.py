@@ -547,6 +547,58 @@ def cmd_check(args):
             except Exception:
                 pass
 
+def cmd_doctor(args):
+    """Report the isolation boundary this host will actually execute code in."""
+    print("SandBench isolation check")
+    print("=" * 52)
+
+    try:
+        report = runner.isolation_report()
+    except Exception as e:
+        print(f"[ERROR] Could not query Docker: {e}")
+        print("        Is the Docker daemon running?")
+        sys.exit(2)
+
+    level = report["isolation"]
+    label = {
+        runner.ISOLATION_GVISOR: "gVisor  — userspace kernel (Sentry) between code and host",
+        runner.ISOLATION_SHARED_KERNEL: "runc    — container shares the HOST kernel",
+    }.get(level, level)
+
+    print(f"  Configured (SANDBOX_RUNTIME) : {report['configured']}")
+    print(f"  Require hardened             : {report['require_hardened']}")
+    print(f"  Daemon runtimes              : {', '.join(report['available_runtimes']) or 'unknown'}")
+    print(f"  gVisor available             : {'yes (' + report['gvisor_runtime'] + ')' if report['gvisor_available'] else 'no'}")
+    print(f"  Effective runtime            : {report['effective_runtime']}")
+    print(f"  Isolation level              : {label}")
+    print()
+
+    if report["error"]:
+        print(f"[BLOCKED] {report['error']}")
+        sys.exit(1)
+
+    if level == runner.ISOLATION_GVISOR:
+        print("[OK] Submissions run behind a userspace kernel. A container escape")
+        print("     has to break the Sentry before it reaches the host kernel.")
+        print()
+        print("     Note: safety-suite audit runs deliberately stay on runc so that")
+        print("     seccomp syscall-attempt evidence is still recorded.")
+    else:
+        print("[WARN] Submissions run against the host kernel. seccomp and dropped")
+        print("       capabilities narrow the syscall surface, but a kernel-level")
+        print("       vulnerability is a host compromise.")
+        print()
+        print("       Install gVisor to close this gap:")
+        print("         bash scripts/install-gvisor.sh")
+        print("       Then set SANDBOX_REQUIRE_HARDENED=1 to make it mandatory.")
+        print("       Details: docs/isolation.md")
+
+    if args.json:
+        import json as _json
+        print()
+        print(_json.dumps(report, indent=2))
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="sandbench",
@@ -578,9 +630,18 @@ def main():
     check_parser.add_argument("--fix", action="store_true", help="Attempt LLM-in-the-loop repair and write patch back to the file")
     check_parser.add_argument("--demo", action="store_true", help="Run the built-in demo task (fizzbuzz buggy solution)")
 
+    # 5. doctor
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Report the sandbox isolation boundary available on this host",
+    )
+    doctor_parser.add_argument("--json", action="store_true", help="Also emit the raw report as JSON")
+
     args = parser.parse_args()
 
-    if args.command == "validate-tasks":
+    if args.command == "doctor":
+        cmd_doctor(args)
+    elif args.command == "validate-tasks":
         cmd_validate_tasks(args)
     elif args.command == "run":
         cmd_run(args)
