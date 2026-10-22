@@ -1,11 +1,8 @@
 # SandBench local stack.
 #
-#   docker compose up                  → redis + frontend (works today)
-#   docker compose --profile backend up → also api + worker + db
+#   docker compose up                  → redis + frontend
+#   docker compose --profile backend up → also api + worker (from ./engine)
 #
-# The `api` and `worker` services build from ./backend, which is scaffolded
-# but not yet implemented (see SandBench_Build_Guide.md §3). They're gated
-# behind the `backend` profile so the frontend slice runs without them.
 
 services:
   redis:
@@ -48,28 +45,24 @@ services:
 
   api:
     build:
-      context: ./backend
+      context: ./engine
     profiles: ["backend"]
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     environment:
-      - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql+psycopg://sandbench:sandbench@db:5432/sandbench
+      - UPSTASH_REDIS_URL=redis://redis:6379
     depends_on:
       redis:
-        condition: service_healthy
-      db:
         condition: service_healthy
 
   worker:
     build:
-      context: ./backend
+      context: ./engine
     profiles: ["backend"]
-    command: rq worker -u redis://redis:6379
+    command: python worker.py
     environment:
-      - REDIS_URL=redis://redis:6379
-      - DATABASE_URL=postgresql+psycopg://sandbench:sandbench@db:5432/sandbench
+      - UPSTASH_REDIS_URL=redis://redis:6379
     # The worker spawns ephemeral sandbox containers via the host Docker daemon.
     # Mounting the socket grants broad host access — acceptable for local dev
     # only. Production should use a rootless/remote daemon, gVisor, or
@@ -78,8 +71,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       redis:
-        condition: service_healthy
-      db:
         condition: service_healthy
 
 volumes:

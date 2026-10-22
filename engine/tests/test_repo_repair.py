@@ -2,6 +2,7 @@ import pytest
 from scoring import registry as task_registry
 from scoring import score as scorer
 
+@pytest.mark.integration
 def test_json_db_scoring_correct():
     task = task_registry.get_task("json-db")
     assert task is not None
@@ -17,6 +18,7 @@ def test_json_db_scoring_correct():
     assert res_correct["score"] == 1.0
     assert res_correct["passed"] == res_correct["total"]
 
+@pytest.mark.integration
 def test_config_manager_scoring_correct():
     task = task_registry.get_task("config-manager")
     assert task is not None

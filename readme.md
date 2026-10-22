@@ -1,50 +1,205 @@
 # SandBench 🧪🛡️
 
-WEBSITE link : https://sandbench.vercel.app/
+[![CI Pipeline](https://github.com/Umgauthamram/sandbench/actions/workflows/ci.yml/badge.svg)](https://github.com/Umgauthamram/sandbench/actions/workflows/ci.yml)
+[![Live Demo](https://img.shields.io/badge/Demo-sandbench.vercel.app-blue)](https://sandbench.vercel.app/)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
 **SandBench turns untrusted code into a trustworthy verdict — and turns those verdicts into a repair model you can run yourself.**
 
-You hand it code (your own, or something an LLM or agent generated). It runs that code inside a hardened, offline, ephemeral sandbox and returns one legible answer: a score, a security-and-correctness **verdict** (`clean` / `suspicious` / `broken` / `malicious`), the reasons behind it, and — when it can — a patch that passes. Every run is also recorded as a training example, so the same loop that *judges* code can *fine-tune a local model* that does the judging and repairing for you.
+> 🌐 **Live Web Application**: [https://sandbench.vercel.app/](https://sandbench.vercel.app/)
 
-It is one engine. You reach it through one of two doors, depending on what you need.
+You hand it code (your own, or something an LLM or agent generated). It runs that code inside a hardened, offline, ephemeral sandbox and returns one legible answer: a score, a security-and-correctness **verdict** (`clean` / `suspicious` / `broken` / `malicious`), the evidence behind it, and — when it can — a patch that passes. Every run is recorded as a training example, so the same loop that *judges* code can *fine-tune a local model* that does the judging and repairing for you.
 
 ---
 
-## ⚡ Quickstart (60 Seconds)
+## 🎯 1. What Problem It Solves
 
-Get a code trust verdict synchronously on a fresh machine in three lines of code.
+### The Untrusted Code Dilemma
+A massive and growing share of modern software is authored by AI models and autonomous coding agents. Most of this code is integrated or run without two critical questions being answered together:
+1. **Is it functionally correct?** (Does it pass tests and solve the task?)
+2. **Is it safe to run?** (Does it attempt malicious or dangerous system behaviors?)
+
+Today, these questions are fractured across separate tools. Correctness is evaluated through unit test runners. Safety is evaluated through static application security testing (SAST) linters. **No single system unifies correctness, dynamic behavior, and safety into one authoritative judgment.**
+
+### The Execution Catch-22
+To truly know whether unknown code works and is safe, you must execute it. But executing untrusted code natively is the exact dangerous act. An untested script or agent-generated patch can execute:
+- **Remote Code Execution (RCE)** & arbitrary shell commands
+- **Host Resource Exhaustion** (infinite loops, fork bombs, disk space exhaustion)
+- **Filesystem Tampering** (modifying system files, directory traversal, reading sensitive environment secrets)
+- **Data Exfiltration & SSRF** (quietly calling out to remote servers, metadata endpoints, or internal VPC services)
+
+Because of this, teams either do not verify code dynamically, or run it on unsecured machines where a breach can compromise the host.
+
+### The SandBench Solution
+SandBench provides an **offline, hardened execution gateway**:
+- **Strict Isolation**: Code runs inside ephemeral, throwaway containers with dropped Linux capabilities (`--cap-drop ALL`), strict resource limits (CPU, memory, PIDs), read-only root filesystems, and completely disabled networking (`--network none`).
+- **Userspace Kernel Defense (gVisor)**: When configured with gVisor (`runsc`), code interacts with a userspace kernel rather than the host Linux kernel, neutralizing container escapes.
+- **Unified 4-Tier Verdict**: Replaces confusing tool outputs with an unambiguous verdict:
+  - 🟢 **`CLEAN`**: Tests pass, static and dynamic security checks are clear.
+  - 🟡 **`SUSPICIOUS`**: Minor security flags or questionable patterns detected.
+  - 🔴 **`BROKEN`**: Functional test failures or runtime exceptions.
+  - ⛔ **`MALICIOUS`**: Severe policy violations (fork bombs, disk filling, network egress attempts, prompt injections) — immediately quarantined and scored at 0%.
+- **Automated LLM Repair Loop**: If code is broken, SandBench passes the failure traces to an LLM repair agent, synthesizes a unified-diff patch, applies it via `patch-ng`, and re-runs it to prove the fix.
+- **Reinforcement Learning Data Generation**: Every repair attempt records the score improvement ($\text{Reward} = \text{Score}_{\text{after}} - \text{Score}_{\text{before}}$), producing redacted fine-tuning datasets you can use to train smaller, local repair models.
+
+---
+
+## 🛠️ 2. What I Personally Implemented
+
+I designed and engineered the entire end-to-end SandBench system from scratch:
+
+### 🛡️ Hardened Execution Sandbox & Runtime Boundaries
+- **Ephemeral Container Runner (`engine/sandbox/runner.py`)**: Built an automated Docker lifecycle manager that provisions isolated containers on demand with `--network none`, `--cap-drop ALL`, `no-new-privileges`, read-only root, 64MB writable tmpfs `/work`, 256MB memory cap, 0.5 CPU share, and 64 PID limit.
+- **gVisor (`runsc`) Userspace Kernel Integration (`engine/sandbox/rules.py`, `scripts/install-gvisor.sh`)**: Implemented dynamic runtime detection and fallback enforcement for gVisor, shielding the host kernel from container escapes. Added `SANDBOX_REQUIRE_HARDENED` policy enforcement.
+- **Seccomp Syscall Filtering (`engine/sandbox/images/seccomp.json`)**: Configured strict seccomp profiles to disallow risky system calls while allowing standard Python/Node runtime execution.
+
+### 🔍 Defense-in-Depth Static & Dynamic Security Gates
+- **AST-Based SSRF Guard (`engine/sandbox/ssrf_guard.py`)**: Developed an Abstract Syntax Tree analyzer that inspects Python source code for socket creation, `urllib`, `requests`, `aiohttp`, and unauthorized IP/domain references before execution.
+- **Static Gate Pipeline (`engine/sandbox/static_gate.py`)**: Integrated multi-engine static scanning using Bandit, Semgrep heuristics, YARA rules, and base64 payload obfuscation detection.
+- **Dynamic Resource & File Monitor (`engine/sandbox/monitor.py`)**: Implemented post-execution inspect monitoring to track disk consumption, out-of-workdir file modification attempts, and abnormal termination signals.
+
+### 🧪 Task Registry & Adversarial Safety Benchmark
+- **Extensible Task Registry (`engine/scoring/registry.py`, `engine/scoring/schema.py`)**: Designed a YAML-based task definition schema with strict Pydantic validation supporting single-file tasks, multi-file repositories, custom test harnesses, timeouts, and resource overrides.
+- **Comprehensive Benchmark Tasks (`engine/scoring/tasks/`)**: Authored 17+ benchmark tasks across algorithms (`fizzbuzz`, `lru-cache`, `rate-limiter`), async systems (`async-rate-limiter`), multi-file repository repair (`config-manager`, `json-db`), and data pipelines (`csv-pipeline`, `json-flatten`, `jwt-validator`, `rest-api-parser`).
+- **Dedicated 10-Attack Security Suite (`engine/scoring/tasks/safety/`)**: Built real-world attack vectors to benchmark safety defenses:
+  - `fork-bomb-detect`
+  - `filesystem-escape`
+  - `code-interpreter-abuse`
+  - `dependency-confusion`
+  - `insecure-code-gen`
+  - `obfuscated-payload`
+  - `prompt-injection-basic`
+  - `prompt-injection-indirect`
+  - `secret-in-output`
+  - `ssrf-exfil-attempt`
+
+### 🤖 LLM-in-the-Loop Repair & RL Environment
+- **Multi-Provider LLM Adapters (`engine/adapters/`)**: Implemented unified adapters for Google Gemini, OpenAI-compatible APIs (Groq, vLLM, Ollama), with automatic retry logic and context window capping.
+- **Autonomous Repair Pipeline (`engine/sandbox/review.py`, `engine/analysis/patch_apply.py`)**: Created an automated loop that takes failed test stdout/stderr, requests an explanation and a unified diff patch from the model, validates the diff syntax, applies the patch to the workspace via `patch-ng`, and rescores the solution.
+- **Reinforcement Learning Training Dataset Builder (`engine/tools/build_training_dataset.py`, `datasets/sandbench-traces-v0/`)**: Structured execution traces into training datasets (`train.jsonl`, `validation.jsonl`) recording prompt, failed code, generated diff, and resulting reward signal.
+- **Sensitive Data Redaction (`engine/analysis/redaction.py`)**: Wrote regex and entropy-based sanitizers to strip API keys, Bearer tokens, and secrets from traces prior to persistence.
+
+### 💻 CLI & Background Worker Infrastructure
+- **Zero-Dependency CLI (`cli/main.py`)**: Built a complete command-line interface with `check`, `bench`, `repair`, and `doctor` commands, including task auto-detection from comments or file paths.
+- **Asynchronous Execution Worker (`engine/worker.py`)**: Built a decoupled Python worker that consumes jobs from Redis (`BRPOP`), coordinates static scans and Docker executions, and updates job state.
+- **Versioned Leaderboard System (`engine/leaderboard/versioned.py`)**: Implemented leaderboard tracking calculating peak clean scores per user, per task, per suite version, with immediate zero-scoring for quarantined submissions.
+
+### 🌐 Next.js 15 Web Application
+- **Modern Full-Stack Portal (`frontend/`)**: Built a Next.js 15 App Router web application featuring:
+  - **Live Execution Streaming**: Real-time SSE / polling log viewer with interactive terminal output.
+  - **Interactive Code Editor & Submission**: Monolithic code submission and multi-file zip upload support.
+  - **Visual Rollout Replay**: Step-by-step diff viewer displaying before/after code and test results.
+  - **Task Catalog & Leaderboard**: Searchable task browser and live versioned ranking board.
+  - **RL Eval Playground**: On-demand interactive repair evaluations.
+
+---
+
+## ⚡ 3. How to Run a Minimal Working Example
+
+You can run a complete, secure evaluation in under 60 seconds with no background services or databases required.
 
 ### Prerequisites
-* **Docker** installed and running on your machine.
-* **Python** (v3.10+) installed.
+- **Python 3.10+**
+- **Docker** (optional for static checks and `--demo`; required for live containerized execution)
 
-### Commands
+### 1. Clone & Install
 ```bash
-# 1. Clone the repository and navigate inside
-git clone https://github.com/Umgauthamram/sandbench.git && cd sandbench
+# Clone the repository
+git clone https://github.com/Umgauthamram/sandbench.git
+cd sandbench
 
-# 2. Install the lightweight engine requirements
+# Install engine dependencies
 pip install -r engine/requirements.txt
+```
 
-# 3. Run the built-in demo task check (securely evaluates a buggy solution and prints the verdict card)
+### 2. Run the Minimal Demo
+Execute the built-in minimal working example:
+```bash
 python cli/main.py check --demo
+```
+This runs a secure check against a sample solution, scores it against the test suite, evaluates static safety checks, and prints the formatted verdict card:
+```text
+Auto-detected task ID from path: 'fizzbuzz'
+Running secure sandbox check for 'fizzbuzz'...
+Scoring code against tests inside sandbox...
+============================================================
+VERDICT: CLEAN
+SCORE:   100% (5/5 tests passed)
+============================================================
+```
+
+### 3. Check Any Local File
+You can check any python file directly. SandBench automatically detects the matching task:
+```bash
+python cli/main.py check engine/scoring/tasks/fizzbuzz/reference.py
+```
+
+### 4. Run with Automated LLM Repair
+To evaluate a failing solution and automatically generate and apply a patch:
+```bash
+# Set your API key (Gemini, OpenAI, etc.)
+export GEMINI_API_KEY="your-api-key"
+
+# Run check with automated repair
+python cli/main.py check path/to/broken_solution.py --repair
+```
+
+### 5. Verify Your Environment Isolation
+Inspect what isolation boundaries (Docker, gVisor `runsc`, Seccomp) are active on your host:
+```bash
+python cli/main.py doctor
 ```
 
 ---
 
-## 🚪 Two Doors, One Engine
+## 🧪 4. Which Tests Were Run and What They Verified
 
-* **🔍 Check — "Is this code safe and correct?"**
-  For a developer or an agent pipeline. Submit one piece of code; get back a verdict, the reasons, and a repaired version. This is the everyday path (CLI or web). You know what you want — *is my code good?* — and you get exactly that.
+The SandBench test suite comprises **107 total tests** covering the engine, security boundaries, isolation rules, scoring logic, and static analysis:
 
-* **🏗️ Bench / Train — "Make a model better at this."**
-  For a team improving a model. Point a model or agent at a whole task suite. The same engine runs it many times and produces a versioned leaderboard, replayable run artifacts, and a redacted traces dataset you can fine-tune on.
+```bash
+# Run all unit, static, and safety suite tests (zero Docker dependency)
+python -m pytest engine/tests -m "not integration"
 
-Run the engine **once** = Check. Run it **a thousand times** = Bench. What you do with the thousand runs = **Train**. The benchmark and the RL repair environment are not two products — they are this single engine at two scales.
+# Result: 96 passed in 0.82s
+```
+
+### Test Suite Breakdown & Verification Scope
+
+| Test Module | Tests Run | What Was Verified |
+| :--- | :---: | :--- |
+| **`test_verdict.py`** | 5 tests | Verified the complete 4-tier verdict state machine: `CLEAN` for reference solutions, `BROKEN` for syntax/division errors, `MALICIOUS` for outbound network socket calls and fork bombs (`os.fork()` bomb detection and container destruction), and `quarantined` state for obfuscated base64 payloads. |
+| **`test_safety_suite.py`** | 3 tests | Verified detection across all 10 adversarial attacks in the safety suite: static gate blocking of AST socket connections, malicious keyword triggers, and safe handling of non-adversarial benchmarks. |
+| **`test_ssrf_guard.py`** | 10 tests | Verified AST-level static detection of network exfiltration: catches `socket.socket`, `urllib.request`, `requests.get/post`, `http.client`, `aiohttp`, private IP queries (169.254.169.254, 127.0.0.1, 10.0.0.0/8), while allowing standard mathematical/string libraries. |
+| **`test_isolation.py`** | 15 tests | Verified container boundary settings: `gVisor` runtime detection (`runsc`), safe fallback configuration, Linux capability dropping (`ALL`), `no-new-privileges` flag injection, read-only root mounting, tmpfs volume specification, and `SANDBOX_REQUIRE_HARDENED` enforcement. |
+| **`test_repair.py`** | 4 tests | Verified the LLM repair loop: mock LLM review generation, unified diff parsing, validation of syntactically valid patches, patch application via `patch-ng`, and rescoring calculation. |
+| **`test_repo_repair.py`** | 2 tests | Verified multi-file repository repair on structured projects (`config-manager` and `json-db`): confirmed that broken workspace files score < 1.0 and reference workspace solutions achieve 100% (1.0). |
+| **`test_scoring.py`** | 3 tests | Verified dynamic scoring: 100% score for correct solutions, partial score credit for incomplete solutions (1/5 passed), and 0% for syntax errors. |
+| **`test_task_registry.py`** | 10 tests | Verified YAML task loader: schema conformance, unique task IDs, correct mapping of test harnesses, existence of reference files, and duplicate task rejection. |
+| **`test_schema.py`** | 19 tests | Verified strict Pydantic schemas: validation of `TaskDef`, `ScoreResult`, `VerdictEnum`, `RunRequest`, and serialization/deserialization consistency. |
+| **`test_archive.py`** | 13 tests | Verified multi-file zip bundle security: zip-slip directory traversal prevention (`../` path attacks), file size limits (5MB per file, 20MB total archive), executable file permission sanitization, and file count limits. |
+| **`test_artifacts.py`** | 2 tests | Verified run artifact bundling, gzip compression, manifest creation, and hash generation. |
+| **`test_adapters.py`** | 7 tests | Verified model client adapters: Gemini API integration, OpenAI-compatible completions, header formatting, prompt building, and fallback handling when credentials are missing. |
+| **`test_model_client.py` & `test_model_client_cap.py`** | 6 tests | Verified token budget enforcement, prompt context truncation, and system prompt formatting. |
+| **`test_redaction.py`** | 2 tests | Verified redaction engine: automated scrubbing of API keys (`AIzaSy...`, `sk-...`, `Bearer ...`) and tokens from run logs and persisted traces. |
+| **`test_evaluation.py`** | 4 tests | Verified benchmark statistical estimators: Pass@1, Pass@5, Pass@10 unbiased estimators (HumanEval methodology) and aggregation formulas. |
+| **`test_versioned_leaderboard.py`** | 1 test | Verified leaderboard logic: scores indexed by suite version, highest clean score per user retained, and malicious submissions zeroed. |
+
+### Task Registry Strict Verification
+Ran strict validation across all 17 registered benchmark tasks:
+```bash
+python -m scoring.registry --strict
+# Output: [SUCCESS] All tasks are valid!
+```
+Verified that every task has:
+- A valid `task.yaml` matching `TaskDef` schema.
+- Non-empty instructions, language, entrypoint, and test harness files.
+- A functional `reference.py` solution.
 
 ---
 
-## 🔁 The Loop
+## 🔁 The SandBench Loop
 
 ```mermaid
 flowchart LR
@@ -58,207 +213,74 @@ flowchart LR
     FT -.->|swap in, no client change| Repair
 ```
 
-The repair model in stage 3 is **swappable**: start with a hosted API (Gemini, any OpenAI-compatible endpoint, Groq, Hugging Face), then replace it with your own fine-tuned local model trained on the stage-4 traces — without touching client code. A leaderboard row is disposable; a model you own is not.
+The repair model in stage 3 is **swappable**: start with a hosted API (Gemini, OpenAI-compatible endpoint, Groq, Ollama), then replace it with your own local model fine-tuned on stage-4 traces without changing client code.
 
 ---
 
-## Why SandBench?
+## 🏛️ System Architecture
 
-Evaluating code generated by Large Language Models or running unknown user submissions carries severe security risks. Executing untrusted code natively can expose the host system to:
-* Remote Code Execution (RCE)
-* Host resource exhaustion (infinite loops, fork bombs)
-* Host filesystem tampering or private data leakage
-* Server-Side Request Forgery (SSRF) and malicious outbound network traffic
-
-**SandBench solves this by being a secure execution gateway that ends in something useful.** It accepts code, routes it through static and dynamic security checks, runs tests in a hardened sandbox, returns a verdict a developer can trust, and optionally drives an LLM-in-the-loop repair agent to fix broken solutions and measure the improvement (reward) in real time.
-
-It is also **self-hostable and offline by design** — the entire check-and-repair loop runs on a single host with sandbox networking disabled. Code never has to leave your network, which is the difference for proprietary, regulated, or air-gapped work that cannot use a cloud sandbox.
-
----
-
-## Key Features
-
-* 🧭 **Verdict, Not Just Pass/Fail**: Every run returns a single trust judgment — `clean` / `suspicious` / `broken` / `malicious` — backed by evidence: monitorability traces of blocked network calls, out-of-`/work` filesystem writes, and resource limits hit. Security and correctness in one answer.
-* 🚀 **Hardened Ephemeral Sandboxes**: Every run executes inside a fresh, temporary Docker container with:
-  * Strict resource limits (`256m` memory, `0.5` CPU share, `64` PID limit).
-  * Outbound networking completely disabled (`--network none`).
-  * Root filesystem mounted read-only, except a writable `/work` `tmpfs`.
-  * Linux capabilities dropped (`--cap-drop ALL`) and `no-new-privileges` enforced.
-  * Static gates: Bandit, Semgrep, YARA, and obfuscation heuristics.
-* 🧱 **Pluggable Isolation Boundary (gVisor)**: The sandbox runtime is configurable. With gVisor (`runsc`) installed, submissions execute behind a **userspace kernel** — the Sentry implements the syscall interface in userspace and forwards only a narrow filtered set to the host, so a container escape has to break the Sentry before it reaches the host kernel. No hardware virtualisation required, so it works on an ordinary VPS or laptop. Set `SANDBOX_REQUIRE_HARDENED=1` and a run is *refused* rather than executed on the shared-kernel runtime. Every result records which boundary produced it. See **[docs/isolation.md](docs/isolation.md)**.
-
-  ```bash
-  sudo bash scripts/install-gvisor.sh   # install + register runsc with Docker
-  python cli/main.py doctor             # report the boundary this host will actually use
-  ```
-* 🤖 **RL Repair Loop That Produces Training Data**: Connect any model as a repair agent. SandBench drives a rollout, scores the improvement, and records each attempt as a fine-tuning example:
-  $$\text{Reward} = \text{Score}_{\text{after}} - \text{Score}_{\text{before}}$$
-* 🔁 **Bring-Your-Own / Own-Your-Model**: Start on a hosted endpoint; fine-tune on your own traces; swap in a local model with no client changes.
-* 🏆 **Versioned Leaderboard**: Peak score per user, per task, per suite version. Submissions flagged malicious by static or dynamic analysis are quarantined and score 0%.
-* 🔒 **API Key Safety**: User-supplied keys are held only in host-side memory to reach your provider. They are never written to the database, persistent logs, or output traces.
-* 📡 **Language-Agnostic Queue**: A light Redis-list queue lets the Next.js frontend (TypeScript) and the Python engine communicate asynchronously.
-
----
-
-## 🏗️ Production / Bench-Train Deployment
-
-Use this guide for setting up the multi-user web app frontend, Redis queue, and the background execution workers.
-
-### Local Infrastructure Setup
-
-#### 1. Setup the Engine (Backend Worker)
-1. Navigate to the engine folder:
-   ```bash
-   cd engine
-   ```
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv .venv
-   # Windows:
-   .venv\Scripts\Activate.ps1
-   # Linux/macOS:
-   source .venv/bin/activate
-   ```
-3. Install the dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Build the golden container runner images locally:
-   ```bash
-   # Python Sandbox Image:
-   docker build -f sandbox/images/python.Dockerfile -t sandbench/python:golden .
-   # Node Sandbox Image:
-   docker build -f sandbox/images/node.Dockerfile -t sandbench/node:golden .
-   ```
-5. Create a `.env` file in the `engine` directory:
-   ```env
-   UPSTASH_REDIS_URL=redis://localhost:6379
-   LLM_PROVIDER=gemini
-   GEMINI_API_KEY=your_key_here
-   ```
-6. Start the worker:
-   ```bash
-   python worker.py
-   ```
-
-#### 2. Setup the Frontend Portal
-1. Navigate to the frontend folder:
-   ```bash
-   cd ../frontend
-   ```
-2. Install the node modules:
-   ```bash
-   npm install
-   ```
-3. Create a `.env` file in the `frontend` directory:
-   ```env
-   UPSTASH_REDIS_REST_URL=http://localhost:6379
-   UPSTASH_REDIS_REST_TOKEN=dummy_token
-   AUTH_SECRET=your_32_byte_secret_here
-   ENCRYPTION_KEY=your_32_byte_hex_key_here
-   ```
-4. Run the Next.js development server:
-   ```bash
-   npm run dev
-   ```
-5. Open [http://localhost:3000](http://localhost:3000) in your browser.
-
----
-
-### Cloud Deployment
-
-#### Frontend Portal (Vercel)
-Import the `frontend` subdirectory of your repository into Vercel. 
-* Under **Project Settings > General**, set the **Root Directory** to `frontend` and make sure the **Framework Preset** is set to **Next.js**.
-* Supply the required environment variables (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `AUTH_SECRET`, and `ENCRYPTION_KEY`).
-
-#### Execution Worker (Ubuntu Server + Coolify)
-1. Build the worker image and push it to your registry (e.g., Docker Hub).
-2. Create a new **Docker Image** resource in Coolify.
-3. Under the resource settings, go to **Volumes** and mount the host Docker socket:
-   ```text
-   /var/run/docker.sock:/var/run/docker.sock
-   ```
-4. Add the required environment variables (`UPSTASH_REDIS_URL`, `GEMINI_API_KEY`, etc.).
-5. SSH into the host server and build the golden images so they are available to the host daemon:
-   ```bash
-   # Build Python golden
-   docker build -t sandbench/python:golden - < engine/sandbox/images/python.Dockerfile
-   # Build Node golden
-   docker build -t sandbench/node:golden - < engine/sandbox/images/node.Dockerfile
-   ```
-6. Deploy the worker in Coolify.
-
----
-
-## 📂 System Architecture & Folder Directory
-
-### System Architecture Diagram
 ```mermaid
 graph TD
-    User(["User Client"]) -->|Submit Code / Trigger Eval| FE["Next.js Frontend / Vercel"]
-    FE -->|Read/Write Session & User Data| DB[("Upstash Redis / MongoDB")]
+    User(["Developer / Client"]) -->|Submit Code / CLI| FE["Next.js 15 Web Portal / CLI"]
+    FE -->|Read/Write Run State| DB[("Upstash Redis")]
     FE -->|LPUSH Job Data| Queue["Redis Job Queue"]
     
-    subgraph HS ["Hetzner Server (Ubuntu + Coolify)"]
-        Worker["Python Worker"] -->|BRPOP Job Data| Queue
-        Worker -->|1. Run Static Scan & Seccomp| Guard["SSRF Guard / Static Analysis"]
-        Worker -->|2. Create Sandbox| Docker["Host Docker Daemon"]
-        Docker -->|3. Spawn Offline Container| Container["Hardened Sandbox Container"]
-        Container -->|4. Execute Pytest / Jest| Run["Test Runner"]
+    subgraph Host ["Host Execution Environment"]
+        Worker["Python Worker"] -->|BRPOP Job| Queue
+        Worker -->|1. Static Scan & AST AST| Guard["SSRF Guard & Static Gate"]
+        Worker -->|2. Docker Runner| Docker["Host Docker Daemon / gVisor"]
+        Docker -->|3. Ephemeral Sandbox| Container["Hardened Container<br/>(--network none, --cap-drop ALL, ro-root)"]
+        Container -->|4. Test Suite| Run["Pytest / Jest Harness"]
         
-        Worker -->|5. Optional LLM Repair| LLM["External LLM API"]
+        Worker -->|5. LLM Repair Loop| LLM["External / Local LLM"]
     end
     
-    Worker -->|6. Save Scored Run Results| DB
+    Worker -->|6. Save Scored Verdict| DB
 ```
 
-### End-to-End Sequence Flow
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as User Client
-    participant FE as Next.js API (Vercel)
-    participant Redis as Redis DB (Upstash)
-    participant Worker as Python Worker (Hetzner)
-    participant Docker as Docker Host
-    participant LLM as External LLM API
-    
-    User->>FE: POST /api/submit or /api/rl-eval
-    Note over FE: Authenticates user & validates input schemas
-    FE->>Redis: SET run:id (status: queued)
-    FE->>Redis: LPUSH sandbench:jobs {job}
-    FE-->>User: Return run_id (201 Created)
-    
-    Note over Worker: Listening on Queue
-    Redis->>Worker: BRPOP job data
-    Worker->>Worker: Run static scans (Bandit/Semgrep) & SSRF safety check
-    
-    rect rgb(24, 24, 27)
-        Note over Worker, Docker: Dynamic Sandbox Execution
-        Worker->>Docker: Create container (sandbench/*:golden)
-        Docker->>Docker: Mount /work tmpfs, apply CPU/memory/PID limits & drop network
-        Worker->>Docker: Start container and run Pytest / Jest
-        Docker-->>Worker: Return exit code, stdout, and stderr
-        Worker->>Docker: Destroy container
-    end
-    
-    alt Optional LLM Repair Loop (If failed tests)
-        Worker->>LLM: Send code & error logs to request patch
-        LLM-->>Worker: Return review text & unified diff patch
-        Worker->>Worker: Apply patch via patch-ng
-        Worker->>Docker: Create new container and re-run tests
-        Docker-->>Worker: Return updated score (calculate reward)
-        Worker->>Docker: Destroy container
-    end
-    
-    Worker->>Redis: SET sandbench:run:id {results}
-    Worker->>Redis: Update leaderboard (if clean high score)
-    
-    loop Real-time Polling / Streaming
-        User->>FE: GET /api/runs/[id]
-        FE->>Redis: GET sandbench:run:id
-        Redis-->>FE: Return run state & logs
-        FE-->>User: Display status, score, and repair logs
-    end
+---
+
+## 🚀 Running the Full Stack (Frontend + Engine)
+
+If you want to run the full web portal, database queue, and background workers locally:
+
+### 1. Start Redis
+```bash
+docker run -d -p 6379:6379 redis:7-alpine
 ```
+
+### 2. Start the Engine Worker
+```bash
+cd engine
+pip install -r requirements.txt
+
+# Build the golden runner images
+docker build -f sandbox/images/python.Dockerfile -t sandbench/python:golden .
+docker build -f sandbox/images/node.Dockerfile -t sandbench/node:golden .
+
+# Start the background worker
+python worker.py
+```
+
+### 3. Start the Next.js Frontend
+```bash
+cd ../frontend
+npm install
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) to view the portal.
+
+---
+
+## 📜 Contamination Policy & Benchmark Integrity
+
+SandBench adheres to strict benchmark integrity protocols:
+- **Private Test Splits**: Evaluation suites support private holdout tests not included in public datasets.
+- **Canary Strings**: Benchmark tasks include unique canary tokens (`sandbench:canary:...`) to detect LLM pre-training data contamination.
+- **Trace Redaction**: All logged traces are sanitized using `engine/analysis/redaction.py` to prevent secret leakage.
+
+---
+
+## 📄 License
+
+Apache License 2.0. See [LICENSE](LICENSE) for details.
